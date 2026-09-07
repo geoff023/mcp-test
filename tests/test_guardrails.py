@@ -6,23 +6,10 @@ mock of the guardrail logic itself.
 
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
-
 import pytest
 
 from gateway.guardrails import GuardrailViolation, check_no_milestone_date_change
 from gateway.jira import Issue
-
-SCHEMA_SQL = (Path(__file__).resolve().parent.parent / "db" / "schema.sql").read_text()
-
-
-@pytest.fixture
-def conn():
-    connection = sqlite3.connect(":memory:")
-    connection.executescript(SCHEMA_SQL)
-    yield connection
-    connection.close()
 
 
 def _issue(**overrides) -> Issue:
