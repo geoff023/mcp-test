@@ -110,3 +110,36 @@ button {
 }
 button.approve { background: #2f8f3c; color: #fff; border-color: #2f8f3c; }
 button.reject { background: #b23b3b; color: #fff; border-color: #b23b3b; }
+button:disabled { background: #eee; color: #999; border-color: #ccc; cursor: not-allowed; }
+
+input[type="text"] {
+  width: 6rem;
+  padding: 0.3rem;
+  font-family: inherit;
+}
+
+.edited-note { color: #666; font-size: 0.85rem; font-style: italic; }
+
+.ack-form button {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.token-box {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #2f8f3c;
+  border-radius: 4px;
+  background: #f3faf3;
+}
+
+.token-value {
+  display: block;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  word-break: break-all;
+  font-family: ui-monospace, Consolas, monospace;
+}

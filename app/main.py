@@ -83,6 +83,26 @@ def show_run(request: Request, run_id: str):
             "SELECT * FROM staged_changes WHERE run_id = ? ORDER BY issue_key", (run_id,)
         ).fetchall()
 
+        # L4 has no direct approve - a token has to be issued (only once every
+        # staged change is acknowledged) and then consumed by the agent's own
+        # commit_changes call. Work out what state that handoff is in so the
+        # template can show either the acknowledge/issue-token controls or the
+        # issued token itself.
+        active_token = None
+        all_acknowledged = False
+        if run["level"] == "L4":
+            active_token = _conn.execute(
+                "SELECT token, expires_at FROM approval_tokens "
+                "WHERE run_id = ? AND consumed_at IS NULL ORDER BY issued_at DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            if active_token is not None:
+                expires_at = datetime.fromisoformat(active_token["expires_at"])
+                if expires_at < datetime.now(timezone.utc):
+                    active_token = None  # expired - treat as if none was issued
+            pending = [c for c in changes if c["applied_at"] is None]
+            all_acknowledged = bool(pending) and all(c["acknowledged"] for c in pending)
+
     rows = []
     for change in changes:
         summary = change["issue_key"]
@@ -100,17 +120,44 @@ def show_run(request: Request, run_id: str):
             }
         )
 
-    return templates.TemplateResponse(request, "run.html", {"run": run, "rows": rows})
+    return templates.TemplateResponse(
+        request,
+        "run.html",
+        {"run": run, "rows": rows, "active_token": active_token, "all_acknowledged": all_acknowledged},
+    )
 
 
 @app.post("/runs/{run_id}/approve")
-def approve_run(run_id: str):
+async def approve_run(request: Request, run_id: str):
     with _lock:
         run = _conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         if run is None:
             raise HTTPException(status_code=404, detail="run not found")
         if run["status"] != "awaiting_review":
             raise HTTPException(status_code=400, detail=f"run is {run['status']}, not awaiting_review")
+        if run["level"] == "L4":
+            raise HTTPException(
+                status_code=400,
+                detail="L4 runs are approved via /issue-token and the agent's commit_changes call, not /approve",
+            )
+
+        if run["level"] == "L2":
+            # The review page posted one value_<change_id> field per row -
+            # a human may have changed some of them. Only set edited_value
+            # where it actually differs, so was_edited stays honest.
+            form = await request.form()
+            pending = _conn.execute(
+                "SELECT id, new_value FROM staged_changes WHERE run_id = ? AND applied_at IS NULL",
+                (run_id,),
+            ).fetchall()
+            for change in pending:
+                submitted = form.get(f"value_{change['id']}")
+                if submitted is not None and submitted != change["new_value"]:
+                    _conn.execute(
+                        "UPDATE staged_changes SET edited_value = ? WHERE id = ?",
+                        (submitted, change["id"]),
+                    )
+            _conn.commit()
 
         token = str(uuid.uuid4())
         expires_at = (datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES)).isoformat()
@@ -139,6 +186,79 @@ def approve_run(run_id: str):
             action="approve",
             outcome="applied",
             detail=detail,
+        )
+    return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
+
+
+@app.post("/runs/{run_id}/changes/{change_id}/acknowledge")
+def acknowledge_change(run_id: str, change_id: str):
+    """L4 only: toggle one staged change's acknowledged flag. issue_token
+    below refuses until every staged change on the run has this set."""
+    with _lock:
+        run = _conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        if run["status"] != "awaiting_review":
+            raise HTTPException(status_code=400, detail=f"run is {run['status']}, not awaiting_review")
+
+        change = _conn.execute(
+            "SELECT acknowledged FROM staged_changes WHERE id = ? AND run_id = ?", (change_id, run_id)
+        ).fetchone()
+        if change is None:
+            raise HTTPException(status_code=404, detail="staged change not found")
+
+        _conn.execute(
+            "UPDATE staged_changes SET acknowledged = ? WHERE id = ?",
+            (0 if change["acknowledged"] else 1, change_id),
+        )
+        _conn.commit()
+    return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
+
+
+@app.post("/runs/{run_id}/issue-token")
+def issue_token(run_id: str):
+    """L4 only: issue an approval_tokens row once every staged change is
+    acknowledged. Applies nothing and does not touch runs.status - the
+    token only takes effect when the agent calls commit_changes with it.
+    """
+    with _lock:
+        run = _conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        if run["level"] != "L4":
+            raise HTTPException(status_code=400, detail="issue-token is only for L4 runs")
+        if run["status"] != "awaiting_review":
+            raise HTTPException(status_code=400, detail=f"run is {run['status']}, not awaiting_review")
+
+        total, unacknowledged = _conn.execute(
+            "SELECT COUNT(*), SUM(CASE WHEN acknowledged = 0 THEN 1 ELSE 0 END) "
+            "FROM staged_changes WHERE run_id = ? AND applied_at IS NULL",
+            (run_id,),
+        ).fetchone()
+        if not total:
+            raise HTTPException(status_code=400, detail="no staged changes to acknowledge")
+        if unacknowledged:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{unacknowledged} of {total} staged change(s) not yet acknowledged",
+            )
+
+        token = str(uuid.uuid4())
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES)).isoformat()
+        _conn.execute(
+            "INSERT INTO approval_tokens (token, run_id, issued_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, run_id, _now(), expires_at),
+        )
+        _conn.commit()
+
+        log_audit(
+            _conn,
+            run_id=run_id,
+            actor=HUMAN_ACTOR,
+            level=run["level"],
+            action="issue_token",
+            outcome="issued",
+            detail=f"token expires {expires_at}; hand it to the agent to call commit_changes",
         )
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 
