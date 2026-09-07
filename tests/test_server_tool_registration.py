@@ -21,7 +21,12 @@ def _tool_names(conn, jira, level: str) -> set[str]:
 
 def test_l1_registers_only_read_tools(conn, jira_with_spy):
     jira, _ = jira_with_spy
-    assert _tool_names(conn, jira, "L1") == READ_TOOLS
+    names = _tool_names(conn, jira, "L1")
+
+    assert names == READ_TOOLS
+    # Slice 2 regression guard: L1 still gets no write surface at all, not
+    # even a soft one - see docs/slice-2.md's L1 decision.
+    assert "start_run" not in names
 
 
 def test_l2_registers_read_and_propose_tools(conn, jira_with_spy):

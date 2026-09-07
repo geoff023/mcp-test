@@ -15,8 +15,13 @@ from gateway.jira import JiraClient
 def conn():
     """A fresh in-memory SQLite db, built by running the real
     db/migrations/*.sql through the exact same apply_migrations() path
-    production uses - not a separate schema snapshot that could drift."""
-    connection = sqlite3.connect(":memory:")
+    production uses - not a separate schema snapshot that could drift.
+
+    check_same_thread=False for the same reason db/migrate.py's real
+    connections use it: FastAPI's TestClient dispatches sync routes
+    through a worker thread, not the thread that created the connection.
+    """
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
     apply_migrations(connection)
     yield connection
     connection.close()
