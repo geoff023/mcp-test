@@ -31,8 +31,13 @@ def migrate(db_path: Path | None = None) -> sqlite3.Connection:
     .env) and return an open connection to it."""
     path = db_path or _db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    # check_same_thread=False: the MCP server may run tool calls off the
+    # main thread. Callers are still responsible for serialising writes
+    # (see gateway/server.py's lock) - sqlite3 connections aren't safe for
+    # concurrent use from multiple threads even with this flag.
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations ("
         "  filename TEXT PRIMARY KEY,"
