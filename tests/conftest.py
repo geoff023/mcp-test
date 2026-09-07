@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from db.migrate import apply_migrations
 from gateway.jira import JiraClient
-
-SCHEMA_SQL = (Path(__file__).resolve().parent.parent / "db" / "schema.sql").read_text()
 
 
 @pytest.fixture
 def conn():
-    """A fresh in-memory SQLite db built from the real schema - isolated
-    from the on-disk demo db, but never a mock of the schema itself."""
+    """A fresh in-memory SQLite db, built by running the real
+    db/migrations/*.sql through the exact same apply_migrations() path
+    production uses - not a separate schema snapshot that could drift."""
     connection = sqlite3.connect(":memory:")
-    connection.executescript(SCHEMA_SQL)
+    apply_migrations(connection)
     yield connection
     connection.close()
 

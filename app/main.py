@@ -126,6 +126,11 @@ def approve_run(run_id: str):
         _conn.execute("UPDATE runs SET status = 'applied' WHERE id = ?", (run_id,))
         _conn.commit()
 
+        applied_keys = [a["issue_key"] for a in applied]
+        edited = [a["issue_key"] for a in applied if a["was_edited"]]
+        detail = f"{len(applied)} issue(s) applied: {applied_keys}"
+        if edited:
+            detail += f" ({len(edited)} edited from the agent's proposal: {edited})"
         log_audit(
             _conn,
             run_id=run_id,
@@ -133,7 +138,7 @@ def approve_run(run_id: str):
             level=run["level"],
             action="approve",
             outcome="applied",
-            detail=f"{len(applied)} issue(s) applied: {applied}",
+            detail=detail,
         )
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 

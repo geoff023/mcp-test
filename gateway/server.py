@@ -227,6 +227,7 @@ class GatewayTools:
             )
             self.conn.execute("UPDATE runs SET status = 'applied' WHERE id = ?", (run_id,))
             self.conn.commit()
+            applied_keys = [a["issue_key"] for a in applied]
             log_audit(
                 self.conn,
                 run_id=run_id,
@@ -234,9 +235,9 @@ class GatewayTools:
                 level=self.level,
                 action="commit_changes",
                 outcome="applied",
-                detail=f"{len(applied)} issue(s): {applied}",
+                detail=f"{len(applied)} issue(s): {applied_keys}",
             )
-        return {"run_id": run_id, "applied_issue_keys": applied}
+        return {"run_id": run_id, "applied_issue_keys": applied_keys}
 
     def _require_valid_token(self, token_row: tuple | None, run_id: str) -> None:
         if token_row is None:

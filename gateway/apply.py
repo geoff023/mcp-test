@@ -27,33 +27,49 @@ def apply_staged_changes(
     *,
     actor: str,
     level: str | None,
-) -> list[str]:
+) -> list[dict]:
     """Apply every not-yet-applied staged change for run_id to Jira.
+
+    Applies edited_value when a human has set one (L2 review), new_value
+    otherwise - new_value always stays exactly what the agent proposed, so
+    this is the one place "what actually happened" is decided from the two.
 
     Due-date changes are guardrail-checked immediately before being
     applied - not at propose time only - so a milestone can never slip
     through between proposal and commit. Marks each applied change's
     applied_at, but does not touch runs/approval_tokens or commit the
     connection; callers own that, since what "done" means differs between
-    the L3 app (mark the run applied) and the L4 tool (also consume a
+    the L2/L3 app (mark the run applied) and the L4 tool (also consume a
     token).
+
+    Returns one dict per applied change: issue_key, field, applied_value,
+    and was_edited - callers use was_edited to say in the audit trail
+    whether a value was applied as proposed or as a human's edit.
     """
     changes = conn.execute(
-        "SELECT id, issue_key, field, new_value FROM staged_changes "
+        "SELECT id, issue_key, field, new_value, edited_value FROM staged_changes "
         "WHERE run_id = ? AND applied_at IS NULL",
         (run_id,),
     ).fetchall()
 
-    applied: list[str] = []
-    for change_id, issue_key, field, new_value in changes:
+    applied: list[dict] = []
+    for change_id, issue_key, field, new_value, edited_value in changes:
+        value = edited_value if edited_value is not None else new_value
         if field == "story_points":
-            jira.update_issue_fields(issue_key, {jira.config.story_points_field: float(new_value)})
+            jira.update_issue_fields(issue_key, {jira.config.story_points_field: float(value)})
         elif field == "due_date":
             issue = jira.get_issue(issue_key)
             check_no_milestone_date_change(conn, issue, run_id=run_id, actor=actor, level=level)
-            jira.update_issue_fields(issue_key, {"duedate": new_value})
+            jira.update_issue_fields(issue_key, {"duedate": value})
         else:
             raise ValueError(f"Unknown staged field {field!r} on {issue_key}")
         conn.execute("UPDATE staged_changes SET applied_at = ? WHERE id = ?", (_now(), change_id))
-        applied.append(issue_key)
+        applied.append(
+            {
+                "issue_key": issue_key,
+                "field": field,
+                "applied_value": value,
+                "was_edited": edited_value is not None,
+            }
+        )
     return applied
