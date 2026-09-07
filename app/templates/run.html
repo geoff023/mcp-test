@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run["id"][:8] }} - agentic-pm{% endblock %}
+{% block content %}
+  <p><a href="/">&larr; all runs</a></p>
+  <h1>Run {{ run["id"][:8] }}</h1>
+  <dl class="run-meta">
+    <dt>Level</dt><dd>{{ run["level"] }}</dd>
+    <dt>Task type</dt><dd>{{ run["task_type"] }}</dd>
+    <dt>Scope</dt><dd>{{ run["scope"] }}</dd>
+    <dt>Status</dt><dd><span class="status status-{{ run['status'] }}">{{ run["status"] }}</span></dd>
+    <dt>Created</dt><dd>{{ run["created_at"] }}</dd>
+    {% if run["comment"] %}<dt>Comment</dt><dd>{{ run["comment"] }}</dd>{% endif %}
+  </dl>
+
+  {% if run["level"] == "L3" %}
+    <p class="l3-note">
+      At L3 the agent owns the method; you approve it, comment on it, or send it back.
+    </p>
+  {% endif %}
+
+  <h2>Staged changes</h2>
+  {% if not rows %}
+    <p class="empty">No staged changes on this run.</p>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Issue</th>
+          <th>Field</th>
+          <th>Old value</th>
+          <th>New value</th>
+          <th>Reasoning</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set change = row["change"] %}
+          <tr>
+            <td>{{ change["issue_key"] }} &mdash; {{ row["summary"] }}</td>
+            <td>{{ change["field"] }}</td>
+            <td>{{ row["old_value"] }}</td>
+            <td>{{ change["new_value"] }}</td>
+            <td>{{ change["reasoning"] }}</td>
+            <td>{{ "%.2f"|format(change["confidence"]) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if run["status"] == "awaiting_review" %}
+    <div class="actions">
+      <form method="post" action="/runs/{{ run['id'] }}/approve" class="inline-form">
+        <button type="submit" class="approve">Approve</button>
+      </form>
+      <form method="post" action="/runs/{{ run['id'] }}/reject" class="inline-form">
+        <textarea name="comment" placeholder="Why is this being sent back? (optional)"></textarea>
+        <button type="submit" class="reject">Send back</button>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

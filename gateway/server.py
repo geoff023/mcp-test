@@ -25,6 +25,7 @@ from mcp.server.mcpserver import MCPServer
 
 from db.audit import log_audit
 from db.migrate import get_connection
+from gateway.apply import apply_staged_changes
 from gateway.guardrails import check_no_milestone_date_change
 from gateway.jira import Issue, JiraClient
 
@@ -219,30 +220,7 @@ class GatewayTools:
             ).fetchone()
             self._require_valid_token(token_row, run_id)
 
-            changes = self.conn.execute(
-                "SELECT id, issue_key, field, new_value FROM staged_changes "
-                "WHERE run_id = ? AND applied_at IS NULL",
-                (run_id,),
-            ).fetchall()
-
-            applied: list[str] = []
-            for change_id, issue_key, field, new_value in changes:
-                if field == "story_points":
-                    self.jira.update_issue_fields(
-                        issue_key, {self.jira.config.story_points_field: float(new_value)}
-                    )
-                elif field == "due_date":
-                    issue = self.jira.get_issue(issue_key)
-                    check_no_milestone_date_change(
-                        self.conn, issue, run_id=run_id, actor=ACTOR, level=self.level
-                    )
-                    self.jira.update_issue_fields(issue_key, {"duedate": new_value})
-                else:
-                    raise ValueError(f"Unknown staged field {field!r} on {issue_key}")
-                self.conn.execute(
-                    "UPDATE staged_changes SET applied_at = ? WHERE id = ?", (_now(), change_id)
-                )
-                applied.append(issue_key)
+            applied = apply_staged_changes(self.jira, self.conn, run_id, actor=ACTOR, level=self.level)
 
             self.conn.execute(
                 "UPDATE approval_tokens SET consumed_at = ? WHERE token = ?", (_now(), approval_token)

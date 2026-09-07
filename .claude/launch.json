@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "agentic-pm-app",
+      "runtimeExecutable": "C:\\Users\\User\\.local\\bin\\uv.exe",
+      "runtimeArgs": ["run", "uvicorn", "app.main:app", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

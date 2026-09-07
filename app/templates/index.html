@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Runs - agentic-pm{% endblock %}
+{% block content %}
+  <h1>Runs</h1>
+  {% if not runs %}
+    <p class="empty">No runs yet.</p>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Created</th>
+          <th>Level</th>
+          <th>Task type</th>
+          <th>Scope</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+          <tr>
+            <td>{{ run["created_at"] }}</td>
+            <td>{{ run["level"] }}</td>
+            <td>{{ run["task_type"] }}</td>
+            <td>{{ run["scope"] }}</td>
+            <td><span class="status status-{{ run['status'] }}">{{ run["status"] }}</span></td>
+            <td><a href="/runs/{{ run['id'] }}">review</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}
