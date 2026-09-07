@@ -153,6 +153,23 @@ class JiraClient:
         key = project_key or self.config.project_key
         return self._request("GET", f"/rest/api/{API_VERSION}/project/{key}").json()
 
+    def list_issue_types(self, project_key: str | None = None) -> list[dict]:
+        """Issue types available for creation in a project (id, name, ...).
+
+        This endpoint's payload shape (a paginated {"issueTypes": [...]})
+        matches neither of the two cases _normalize_list handles, so it's
+        unpacked here rather than folded into that helper.
+        """
+        key = project_key or self.config.project_key
+        payload = self._request(
+            "GET", f"/rest/api/{API_VERSION}/issue/createmeta/{key}/issuetypes"
+        ).json()
+        return payload.get("issueTypes", [])
+
+    def create_issue(self, fields: dict) -> dict:
+        """POST a new issue. Returns the created-issue payload (has 'key')."""
+        return self._request("POST", f"/rest/api/{API_VERSION}/issue", json={"fields": fields}).json()
+
     def discover_field(self, name_contains: str) -> list[dict]:
         """List fields whose name contains the given substring (case-insensitive).
 
