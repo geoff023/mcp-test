@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "agentic-pm": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${CLAUDE_PROJECT_DIR}",
+        "run",
+        "python",
+        "-m",
+        "gateway.server"
+      ]
+    }
+  }
+}

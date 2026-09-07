@@ -1,0 +1,21 @@
+[project]
+name = "agentic-pm"
+version = "0.1.0"
+description = "Control plane for agentic project management, built on top of Jira"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "mcp[cli]>=2.1.1",
+    "python-dotenv>=1.2.3",
+    "uvicorn>=0.52.4",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
