@@ -1,96 +1,116 @@
 {% extends "base.html" %}
-{% block title %}Run {{ run["id"][:8] }} - agentic-pm{% endblock %}
+{% block title %}Run {{ run["id"][:8] }} - Agentic PM{% endblock %}
 {% block content %}
   {% set editable = run["level"] == "L2" and run["status"] == "awaiting_review" %}
   {% set ack_mode = run["level"] == "L4" and run["status"] == "awaiting_review" and not active_token %}
 
-  <p><a href="/">&larr; all runs</a></p>
-  <h1>Run {{ run["id"][:8] }}</h1>
-  <dl class="run-meta">
-    <dt>Level</dt><dd>{{ run["level"] }}</dd>
-    <dt>Task type</dt><dd>{{ run["task_type"] }}</dd>
-    <dt>Scope</dt><dd>{{ run["scope"] }}</dd>
-    <dt>Status</dt><dd><span class="status status-{{ run['status'] }}">{{ run["status"] }}</span></dd>
-    <dt>Created</dt><dd>{{ run["created_at"] }}</dd>
-    {% if run["comment"] %}<dt>Comment</dt><dd>{{ run["comment"] }}</dd>{% endif %}
-  </dl>
+  <p class="back-link"><a href="/">&larr; all runs</a></p>
 
-  {% if run["level"] == "L2" %}
-    <p class="l3-note">At L2 you can edit the agent's proposed values below before approving.</p>
-  {% elif run["level"] == "L3" %}
-    <p class="l3-note">At L3 the agent owns the method; you approve it, comment on it, or send it back.</p>
-  {% elif run["level"] == "L4" %}
-    <p class="l3-note">
-      At L4 you acknowledge each change individually, then issue a token for the agent to
-      consume with its own commit_changes call - approving never happens directly here.
-    </p>
-  {% endif %}
+  <div class="page-head">
+    <h1>Run {{ run["id"][:8] }}</h1>
+    <span class="status status-{{ run['status'] }}">{{ run["status"] }}</span>
+  </div>
+
+  <div class="card run-meta-card">
+    <dl class="run-meta">
+      <dt>Mode</dt>
+      <dd>
+        <span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span>
+        <span class="level-code">({{ run["level"] }})</span>
+      </dd>
+      <dt>Task type</dt><dd>{{ run["task_type"] }}</dd>
+      <dt>Scope</dt><dd>{{ run["scope"] }}</dd>
+      <dt>Created</dt><dd class="muted">{{ run["created_at"][:19].replace("T", " ") }}</dd>
+      {% if run["comment"] %}<dt>Comment</dt><dd>{{ run["comment"] }}</dd>{% endif %}
+    </dl>
+
+    {% if run["level"] == "L2" %}
+      <p class="mode-note">
+        <strong>Co-Pilot mode</strong> &mdash; {{ level_tagline("L2") }}. Edit any value below, then Approve.
+      </p>
+    {% elif run["level"] == "L3" %}
+      <p class="mode-note">
+        <strong>Drafter mode</strong> &mdash; {{ level_tagline("L3") }}. The values below are locked.
+      </p>
+    {% elif run["level"] == "L4" %}
+      <p class="mode-note">
+        <strong>Autopilot mode</strong> &mdash; acknowledge each change individually, then issue a
+        token. Only the agent itself can spend that token to write to Jira &mdash; approving never
+        happens directly here.
+      </p>
+    {% endif %}
+  </div>
 
   <h2>Staged changes</h2>
-  {% if not rows %}
-    <p class="empty">No staged changes on this run.</p>
-  {% else %}
-    {% if editable %}<form method="post" action="/runs/{{ run['id'] }}/approve" id="approve-form">{% endif %}
-    <table>
-      <thead>
-        <tr>
-          <th>Issue</th>
-          <th>Field</th>
-          <th>Old value</th>
-          <th>New value</th>
-          <th>Reasoning</th>
-          <th>Confidence</th>
-          {% if ack_mode %}<th>Acknowledged</th>{% endif %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-          {% set change = row["change"] %}
+  <div class="card">
+    {% if not rows %}
+      <p class="empty">No staged changes on this run.</p>
+    {% else %}
+      {% if editable %}<form method="post" action="/runs/{{ run['id'] }}/approve" id="approve-form">{% endif %}
+      <table>
+        <thead>
           <tr>
-            <td>{{ change["issue_key"] }} &mdash; {{ row["summary"] }}</td>
-            <td>{{ change["field"] }}</td>
-            <td>{{ row["old_value"] }}</td>
-            <td>
-              {% if editable %}
-                <input type="text" name="value_{{ change['id'] }}"
-                       value="{{ change['edited_value'] or change['new_value'] }}">
-              {% elif change["edited_value"] %}
-                {{ change["edited_value"] }} <span class="edited-note">(edited from {{ change["new_value"] }})</span>
-              {% else %}
-                {{ change["new_value"] }}
-              {% endif %}
-            </td>
-            <td>{{ change["reasoning"] }}</td>
-            <td>{{ "%.2f"|format(change["confidence"]) }}</td>
-            {% if ack_mode %}
-              <td>
-                <form method="post" action="/runs/{{ run['id'] }}/changes/{{ change['id'] }}/acknowledge" class="ack-form">
-                  <button type="submit">{{ "✓ acknowledged" if change["acknowledged"] else "acknowledge" }}</button>
-                </form>
-              </td>
-            {% endif %}
+            <th>Issue</th>
+            <th>Field</th>
+            <th>Old value</th>
+            <th>New value</th>
+            <th>Reasoning</th>
+            <th>Confidence</th>
+            {% if ack_mode %}<th>Acknowledged</th>{% endif %}
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% if editable %}
-      <div class="actions">
-        <button type="submit" class="approve">Approve</button>
-      </div>
-      </form>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% set change = row["change"] %}
+            <tr>
+              <td class="issue-cell">{{ change["issue_key"] }} <span class="muted">&mdash; {{ row["summary"] }}</span></td>
+              <td>{{ change["field"] }}</td>
+              <td>{{ row["old_value"] }}</td>
+              <td>
+                {% if editable %}
+                  <input type="text" name="value_{{ change['id'] }}"
+                         value="{{ change['edited_value'] or change['new_value'] }}">
+                {% elif change["edited_value"] %}
+                  <strong>{{ change["edited_value"] }}</strong>
+                  <span class="edited-note">(edited from {{ change["new_value"] }})</span>
+                {% else %}
+                  <strong>{{ change["new_value"] }}</strong>
+                {% endif %}
+              </td>
+              <td class="reasoning-cell">{{ change["reasoning"] }}</td>
+              <td><span class="confidence-pill">{{ "%.0f"|format(change["confidence"] * 100) }}%</span></td>
+              {% if ack_mode %}
+                <td>
+                  <form method="post" action="/runs/{{ run['id'] }}/changes/{{ change['id'] }}/acknowledge" class="ack-form">
+                    <button type="submit" class="ack-btn {{ 'is-acknowledged' if change['acknowledged'] }}">
+                      {{ "✓ Acknowledged" if change["acknowledged"] else "Acknowledge" }}
+                    </button>
+                  </form>
+                </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if editable %}
+        <div class="actions">
+          <button type="submit" class="approve">Approve</button>
+        </div>
+        </form>
+      {% endif %}
     {% endif %}
-  {% endif %}
+  </div>
 
   {% if run["level"] == "L4" and run["status"] == "awaiting_review" %}
     {% if active_token %}
       <div class="token-box">
-        <p><strong>Token issued</strong> - hand this to the agent so it can call
+        <p><strong>Token issued</strong> &mdash; hand this to the agent so it can call
           <code>commit_changes(run_id="{{ run['id'] }}", approval_token=&hellip;)</code>:</p>
         <code class="token-value">{{ active_token["token"] }}</code>
         <p class="edited-note">Expires {{ active_token["expires_at"] }}.</p>
       </div>
     {% else %}
-      <div class="actions">
+      <div class="actions card">
         <form method="post" action="/runs/{{ run['id'] }}/issue-token" class="inline-form">
           <button type="submit" class="approve" {% if not all_acknowledged %}disabled{% endif %}>
             Issue token
@@ -103,7 +123,7 @@
       </div>
     {% endif %}
   {% elif run["status"] == "awaiting_review" and run["level"] != "L2" %}
-    <div class="actions">
+    <div class="actions card">
       <form method="post" action="/runs/{{ run['id'] }}/approve" class="inline-form">
         <button type="submit" class="approve">Approve</button>
       </form>
@@ -113,7 +133,7 @@
       </form>
     </div>
   {% elif run["status"] == "awaiting_review" %}
-    <div class="actions">
+    <div class="actions card">
       <form method="post" action="/runs/{{ run['id'] }}/reject" class="inline-form">
         <textarea name="comment" placeholder="Why is this being sent back? (optional)"></textarea>
         <button type="submit" class="reject">Send back</button>

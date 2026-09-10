@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Agent console - Agentic PM{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Agent console</h1>
+  </div>
+  <p class="intro-note">
+    Defines and runs a task through Gemini instead of a human typing a prompt into Claude
+    Code. One task type for now &mdash; the rest are future work.
+  </p>
+
+  <div class="card">
+    <form method="post" action="/agent-console/run" class="agent-console-form">
+      <label>
+        Task type
+        <select disabled>
+          <option selected>Effort Estimation</option>
+        </select>
+      </label>
+
+      <fieldset class="scope-picker">
+        <legend>Which issues?</legend>
+        <label class="radio-option">
+          <input type="radio" name="scope" value="unestimated" checked>
+          Stories with no estimate yet (recommended)
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="scope" value="all">
+          All stories in this project
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="scope" value="specific">
+          Specific issue(s)
+          <input type="text" name="specific_issues" placeholder="e.g. MCP-4, MCP-5" class="scope-specific-input">
+        </label>
+      </fieldset>
+
+      <label>
+        Instructions (optional)
+        <textarea name="instructions" placeholder="Anything the agent should know before estimating..."></textarea>
+      </label>
+
+      <fieldset class="scope-picker">
+        <legend>Working mode</legend>
+        <label class="radio-option mode-option">
+          <input type="radio" name="level" value="L2">
+          <span class="mode-option-text">
+            <strong>Co-Pilot</strong>
+            <span class="muted">{{ level_tagline("L2") }}</span>
+          </span>
+        </label>
+        <label class="radio-option mode-option">
+          <input type="radio" name="level" value="L3" checked>
+          <span class="mode-option-text">
+            <strong>Drafter</strong>
+            <span class="muted">{{ level_tagline("L3") }}</span>
+          </span>
+        </label>
+        <label class="radio-option mode-option">
+          <input type="radio" name="level" value="L4">
+          <span class="mode-option-text">
+            <strong>Autopilot</strong>
+            <span class="muted">{{ level_tagline("L4") }}</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <button type="submit" class="approve run-btn">Run</button>
+    </form>
+  </div>
+
+  <p class="edited-note">
+    This blocks until the agent finishes staging (or fails) &mdash; there is no progress bar yet.
+  </p>
+{% endblock %}

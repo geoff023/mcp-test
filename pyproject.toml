@@ -5,6 +5,7 @@ description = "Control plane for agentic project management, built on top of Jir
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.141.1",
+    "google-genai>=2.22.0",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "mcp[cli]>=2.1.1",
@@ -18,7 +19,9 @@ package = false
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+asyncio_mode = "strict"

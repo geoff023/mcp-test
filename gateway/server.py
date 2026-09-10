@@ -6,7 +6,9 @@ that shouldn't be able to write to Jira simply never receives a
 `commit_changes` tool - the model is never asked to behave, the tool does
 not exist for it to call.
 
-Reads AGENTIC_PM_LEVEL from the environment at startup (default L3).
+Reads AGENTIC_PM_LEVEL from the environment at startup (default L3), and
+AGENTIC_PM_AGENT (default "planning") to say who's actually driving this
+process - a human via Claude Code, or (from slice 3) an orchestrator.
 Nothing here prints to stdout - stdio is the MCP transport, and a stray
 print() corrupts the protocol and silently breaks the connection.
 """
@@ -32,8 +34,7 @@ from gateway.jira import Issue, JiraClient
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_REPO_ROOT / ".env")
 
-AGENT_NAME = "planning"
-ACTOR = f"agent:{AGENT_NAME}"
+DEFAULT_AGENT = "planning"
 
 
 def _now() -> str:
@@ -66,13 +67,31 @@ class GatewayTools:
     connection every tool needs. A plain class rather than module-level
     functions so tests can inject a fake JiraClient/connection instead of
     hitting the network or a real database file.
+
+    `agent` identifies who's actually driving calls through this instance -
+    "planning" for a human typing into Claude Code (the default, unchanged
+    since slice 1), something like "orchestrator:claude-sonnet-5" for the
+    slice 3 orchestrator. It was a hardcoded module constant through slice
+    2; once more than one kind of caller exists, `runs.agent` and
+    `audit_log.actor` need to say which one it actually was.
     """
 
-    def __init__(self, jira: JiraClient, conn: sqlite3.Connection, level: str):
+    def __init__(
+        self,
+        jira: JiraClient,
+        conn: sqlite3.Connection,
+        level: str,
+        agent: str = DEFAULT_AGENT,
+    ):
         self.jira = jira
         self.conn = conn
         self.level = level
+        self.agent = agent
         self._lock = threading.Lock()
+
+    @property
+    def actor(self) -> str:
+        return f"agent:{self.agent}"
 
     # ---------- always registered (read) ----------
 
@@ -98,13 +117,13 @@ class GatewayTools:
             self.conn.execute(
                 "INSERT INTO runs (id, level, task_type, agent, scope, created_at, status) "
                 "VALUES (?, ?, ?, ?, ?, ?, 'running')",
-                (run_id, self.level, task_type, AGENT_NAME, scope, _now()),
+                (run_id, self.level, task_type, self.agent, scope, _now()),
             )
             self.conn.commit()
             log_audit(
                 self.conn,
                 run_id=run_id,
-                actor=ACTOR,
+                actor=self.actor,
                 level=self.level,
                 action="start_run",
                 outcome="ok",
@@ -138,7 +157,7 @@ class GatewayTools:
             log_audit(
                 self.conn,
                 run_id=run_id,
-                actor=ACTOR,
+                actor=self.actor,
                 level=self.level,
                 action="propose_estimate_change",
                 outcome="staged",
@@ -158,7 +177,7 @@ class GatewayTools:
         with self._lock:
             issue = self.jira.get_issue(issue_key)
             check_no_milestone_date_change(
-                self.conn, issue, run_id=run_id, actor=ACTOR, level=self.level
+                self.conn, issue, run_id=run_id, actor=self.actor, level=self.level
             )
             change_id = str(uuid.uuid4())
             self.conn.execute(
@@ -171,7 +190,7 @@ class GatewayTools:
             log_audit(
                 self.conn,
                 run_id=run_id,
-                actor=ACTOR,
+                actor=self.actor,
                 level=self.level,
                 action="propose_due_date_change",
                 outcome="staged",
@@ -191,7 +210,7 @@ class GatewayTools:
             log_audit(
                 self.conn,
                 run_id=run_id,
-                actor=ACTOR,
+                actor=self.actor,
                 level=self.level,
                 action="finish_run",
                 outcome="awaiting_review",
@@ -220,7 +239,7 @@ class GatewayTools:
             ).fetchone()
             self._require_valid_token(token_row, run_id)
 
-            applied = apply_staged_changes(self.jira, self.conn, run_id, actor=ACTOR, level=self.level)
+            applied = apply_staged_changes(self.jira, self.conn, run_id, actor=self.actor, level=self.level)
 
             self.conn.execute(
                 "UPDATE approval_tokens SET consumed_at = ? WHERE token = ?", (_now(), approval_token)
@@ -231,7 +250,7 @@ class GatewayTools:
             log_audit(
                 self.conn,
                 run_id=run_id,
-                actor=ACTOR,
+                actor=self.actor,
                 level=self.level,
                 action="commit_changes",
                 outcome="applied",
@@ -255,7 +274,7 @@ class GatewayTools:
         log_audit(
             self.conn,
             run_id=run_id,
-            actor=ACTOR,
+            actor=self.actor,
             level=self.level,
             action="commit_changes",
             outcome="refused",
@@ -283,12 +302,13 @@ def build_server(
     level: str,
     jira: JiraClient | None = None,
     conn: sqlite3.Connection | None = None,
+    agent: str = DEFAULT_AGENT,
 ) -> MCPServer:
     """Build the MCP server with exactly the tools `level` is allowed to see."""
     if level not in TOOLS_BY_LEVEL:
         raise ValueError(f"Unknown level {level!r}; must be one of {sorted(TOOLS_BY_LEVEL)}")
 
-    tools = GatewayTools(jira=jira or JiraClient(), conn=conn or get_connection(), level=level)
+    tools = GatewayTools(jira=jira or JiraClient(), conn=conn or get_connection(), level=level, agent=agent)
     server: MCPServer = MCPServer(name="agentic-pm")
     registry = {
         "search_issues": tools.search_issues,
@@ -306,7 +326,8 @@ def build_server(
 
 def main() -> None:
     level = os.environ.get("AGENTIC_PM_LEVEL", "L3")
-    server = build_server(level)
+    agent = os.environ.get("AGENTIC_PM_AGENT", DEFAULT_AGENT)
+    server = build_server(level, agent=agent)
     server.run(transport="stdio")
 
 

@@ -1,7 +1,10 @@
 # Slice 2 — levels, for real
 
-**DRAFT — for review.** Not yet approved to build. Follows the same format as
-docs/slice-1.md; open decisions that need your call are marked `[DECIDE]`.
+**Built and shipped.** Both `[DECIDE]` items below were resolved as recommended (L1: no new
+code; L4 token: displayed in the UI, human relays it) and all four tests in section 10 pass
+alongside slice 1's original 18. See the commit history for `db/migrations/0002_*`,
+`gateway/apply.py`, `app/main.py`'s `/issue-token`/`/acknowledge` routes, and
+`scripts/demo_slice2.py` for what actually landed.
 
 **Goal:** turn the four-row table in CLAUDE.md section 2 into something demonstrable, not
 just implemented. Slice 1 proved the spine at L3. This slice proves the other three actually
@@ -239,3 +242,87 @@ Rules: same as slice 1 - verify against real Jira, never mocks; nothing
 in gateway/ prints to stdout; explain each file in 2-3 sentences; stop
 and ask if anything is ambiguous rather than guessing.
 ```
+
+---
+
+## Slice 3 preview (do not build yet)
+
+**A note, not a spec.** Captured 2026-09-08 from a UI reference the user shared (an "Agent
+Console" mockup, image not in the repo — description below; drop the PNG into `docs/assets/`
+if it should be preserved pixel-exact). Direction only. Read this alongside CLAUDE.md before
+actually planning slice 3 for real.
+
+### The shift this represents
+
+Every run so far has been triggered by a human typing a prompt into an interactive Claude
+Code session, which then calls the MCP tools by hand. That was deliberate — slice 1 said the
+orchestrator would come "much later," specifically so the gateway could be proven without
+building an agent loop first. The mockup asks for that later thing: a UI where a human
+configures a task (type, instructions, target list) and something *other than a chat session*
+runs the agent loop. That something is a real orchestrator, for the first time.
+
+### What the mockup shows
+
+A 4-step wizard ("Agent Console"), replacing the chat prompt with a structured trigger:
+
+1. **Define the task** — pill buttons for task type (mockup shows: Weekly Status Report,
+   Standup / Meeting Digest, Risk Scan / Report, Sprint Planning, Effort Estimation,
+   Retrospective Synthesis, Email Draft, Reminder & Nudges), an optional free-text
+   "Instructions" box, and a "Target list" dropdown.
+2. **Working mode** — not detailed in the mockup, but the obvious mapping is choosing L1-L4.
+   That's already first-class here (`AGENTIC_PM_LEVEL`, `TOOLS_BY_LEVEL`) — this step needs a
+   front-end control, not new backend design.
+3. **Run** — the agent executes.
+4. **Review & Decide** — **this already exists.** It's `GET /runs/{run_id}`
+   (`app/templates/run.html`), which already branches by level. Nothing new here except
+   however the wizard hands off into it.
+
+The top bar's "Approvals (4)" badge maps directly to
+`COUNT(*) FROM runs WHERE status = 'awaiting_review'` — a small addition to `GET /`.
+
+### What's actually new
+
+Steps 1-3, and only because step 3 currently has no non-human driver. A real orchestrator:
+takes `(task_type, instructions, target_list, level)`, calls an LLM equipped with the read
+tools, and drives the same `start_run` / `propose_*` / `finish_run` sequence Claude Code has
+been driving by hand since slice 1. Everything downstream — staging, guardrails, the review
+surface, the level gating — is unchanged; only *what calls the propose tools* changes.
+
+### `[DECIDE]` — which task type first?
+
+The instruction was: one easy, demonstrable task type before generalising across the
+mockup's eight.
+
+- **Effort Estimation** (the existing `reestimate` task). **Recommended.** Already works end
+  to end at all four levels, verified against real Jira. The only new work is the
+  orchestrator itself — swap "Claude Code in a terminal" for "a scripted LLM call using the
+  same MCP tools," triggered by the wizard instead of a chat prompt. Zero new Jira surface,
+  zero new guardrail, zero scope risk.
+- **Sprint Planning** (the user's example in conversation). Would need real sprint
+  manipulation via the Agile API (`/rest/agile/1.0/...`) — explicitly out of scope through
+  slice 1 and 2 ("no sprint manipulation"). Picking this reopens that scope decision *and*
+  adds a second Jira API surface before the orchestrator itself is even proven. Not
+  recommended as the first one, though it's a natural second.
+
+Also worth flagging, not deciding: four of the mockup's eight task types conflict with
+CLAUDE.md section 1's stated non-goals as written. "Standup / Meeting Digest" and
+"Retrospective Synthesis" imply a meeting recorder or notes source — CLAUDE.md rules out
+"anything that talks to a real email server, calendar, or meeting recorder." "Email Draft"
+implies real email sending — same rule. "Risk Scan / Report" isn't ruled out by CLAUDE.md
+directly, but slice 1 explicitly deferred "no risk register." None of this blocks starting
+with Effort Estimation — it just means the mockup is a longer-term product vision, and most
+of its task types aren't slice-3-shaped as written.
+
+### Rough shape, if Effort Estimation is picked
+
+- A new `orchestrator/` (or `agent/`) module: takes a run config, calls an LLM (provider/SDK
+  undecided) equipped with `search_issues`/`get_issue` plus the ability to call
+  `propose_estimate_change`, and drives `start_run`/`finish_run` itself.
+- One or two new app routes backing wizard steps 1-2 (e.g. `POST /agent-console/run`) that
+  take task_type/instructions/target_list/level, kick off the orchestrator, and redirect into
+  the existing `/runs/{run_id}` for steps 3-4.
+- `GET /` grows an `awaiting_review` count for the Approvals badge.
+- Provenance gap to resolve: `actor` is currently a hardcoded `"agent:planning"` string
+  (`gateway/server.py`). An orchestrator calling an LLM directly — not through Claude Code —
+  needs a real answer for what goes in that column, and probably which model/prompt version,
+  for the audit trail to stay meaningful once more than one thing can call itself "the agent."

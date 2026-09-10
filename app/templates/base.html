@@ -2,14 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{% block title %}agentic-pm{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Agentic PM{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <nav>
-    <a href="/">Runs</a>
-    <a href="/audit">Audit log</a>
-  </nav>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark">◆</span>
+        <span class="brand-name">Agentic&nbsp;PM</span>
+      </a>
+      <nav>
+        <a href="/">Runs</a>
+        <a href="/agent-console">Agent console</a>
+        <a href="/audit">Audit log</a>
+      </nav>
+    </div>
+  </header>
   <main>
     {% block content %}{% endblock %}
   </main>

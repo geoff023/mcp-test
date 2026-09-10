@@ -1,35 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Audit log - agentic-pm{% endblock %}
+{% block title %}Audit log - Agentic PM{% endblock %}
 {% block content %}
-  <h1>Audit log</h1>
-  {% if not rows %}
-    <p class="empty">Nothing logged yet.</p>
-  {% else %}
-    <table>
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Run</th>
-          <th>Actor</th>
-          <th>Level</th>
-          <th>Action</th>
-          <th>Outcome</th>
-          <th>Detail</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
+  <div class="page-head">
+    <h1>Audit log</h1>
+  </div>
+
+  <div class="card">
+    {% if not rows %}
+      <p class="empty">Nothing logged yet.</p>
+    {% else %}
+      <table>
+        <thead>
           <tr>
-            <td>{{ row["ts"] }}</td>
-            <td>{% if row["run_id"] %}<a href="/runs/{{ row['run_id'] }}">{{ row["run_id"][:8] }}</a>{% endif %}</td>
-            <td>{{ row["actor"] }}</td>
-            <td>{{ row["level"] or "" }}</td>
-            <td>{{ row["action"] }}</td>
-            <td><span class="outcome outcome-{{ row['outcome'] }}">{{ row["outcome"] }}</span></td>
-            <td>{{ row["detail"] or "" }}</td>
+            <th>Time</th>
+            <th>Run</th>
+            <th>Actor</th>
+            <th>Mode</th>
+            <th>Action</th>
+            <th>Outcome</th>
+            <th>Detail</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="muted">{{ row["ts"][:19].replace("T", " ") }}</td>
+              <td>{% if row["run_id"] %}<a href="/runs/{{ row['run_id'] }}">{{ row["run_id"][:8] }}</a>{% endif %}</td>
+              <td><code class="actor-code">{{ row["actor"] }}</code></td>
+              <td>{% if row["level"] %}<span class="level-pill level-{{ row['level'] }}">{{ level_name(row["level"]) }}</span>{% endif %}</td>
+              <td>{{ row["action"] }}</td>
+              <td><span class="outcome outcome-{{ row['outcome'] }}">{{ row["outcome"] }}</span></td>
+              <td class="detail-cell">{{ row["detail"] or "" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
 {% endblock %}

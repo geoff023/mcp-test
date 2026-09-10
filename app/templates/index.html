@@ -1,32 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Runs - agentic-pm{% endblock %}
+{% block title %}Runs - Agentic PM{% endblock %}
 {% block content %}
-  <h1>Runs</h1>
-  {% if not runs %}
-    <p class="empty">No runs yet.</p>
-  {% else %}
-    <table>
-      <thead>
-        <tr>
-          <th>Created</th>
-          <th>Level</th>
-          <th>Task type</th>
-          <th>Scope</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for run in runs %}
+  <div class="page-head">
+    <h1>Runs</h1>
+    {% if awaiting_review_count %}
+      <span class="awaiting-review-badge">{{ awaiting_review_count }} awaiting review</span>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    {% if not runs %}
+      <p class="empty">No runs yet. Start one from the <a href="/agent-console">Agent console</a>.</p>
+    {% else %}
+      <table>
+        <thead>
           <tr>
-            <td>{{ run["created_at"] }}</td>
-            <td>{{ run["level"] }}</td>
-            <td>{{ run["task_type"] }}</td>
-            <td>{{ run["scope"] }}</td>
-            <td><span class="status status-{{ run['status'] }}">{{ run["status"] }}</span></td>
-            <td><a href="/runs/{{ run['id'] }}">review</a></td>
+            <th>Created</th>
+            <th>Mode</th>
+            <th>Task type</th>
+            <th>Scope</th>
+            <th>Status</th>
+            <th></th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+        </thead>
+        <tbody>
+          {% for run in runs %}
+            <tr>
+              <td class="muted">{{ run["created_at"][:19].replace("T", " ") }}</td>
+              <td><span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span></td>
+              <td>{{ run["task_type"] }}</td>
+              <td class="scope-cell">{{ run["scope"] }}</td>
+              <td><span class="status status-{{ run['status'] }}">{{ run["status"] }}</span></td>
+              <td><a class="review-link" href="/runs/{{ run['id'] }}">Review &rarr;</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
 {% endblock %}

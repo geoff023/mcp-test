@@ -21,10 +21,12 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.levels import level_name, level_tagline
 from db.audit import log_audit
 from db.migrate import get_connection
 from gateway.apply import apply_staged_changes
 from gateway.jira import JiraClient
+from orchestrator.agent import OrchestratorError, run_reestimate_task
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -36,6 +38,8 @@ TOKEN_TTL_MINUTES = 15
 app = FastAPI(title="agentic-pm control plane")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
+templates.env.globals["level_name"] = level_name
+templates.env.globals["level_tagline"] = level_tagline
 
 _conn = get_connection()
 _conn.row_factory = sqlite3.Row
@@ -70,7 +74,59 @@ def _display_old_value(change: sqlite3.Row, live_issue) -> object:
 def list_runs(request: Request):
     with _lock:
         runs = _conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
-    return templates.TemplateResponse(request, "index.html", {"runs": runs})
+        awaiting_review_count = _conn.execute(
+            "SELECT COUNT(*) FROM runs WHERE status = 'awaiting_review'"
+        ).fetchone()[0]
+    return templates.TemplateResponse(
+        request, "index.html", {"runs": runs, "awaiting_review_count": awaiting_review_count}
+    )
+
+
+@app.get("/agent-console")
+def agent_console(request: Request):
+    return templates.TemplateResponse(request, "agent_console.html", {})
+
+
+def _build_target_jql(scope: str, specific_issues: str) -> str:
+    """Turns the agent console's plain "which issues?" choice into JQL, so
+    a naive user is never asked to write query syntax themselves."""
+    project_key = _jira.config.project_key
+    if scope == "specific":
+        keys = [k.strip().upper() for k in specific_issues.replace(",", " ").split() if k.strip()]
+        if not keys:
+            raise ValueError("Enter at least one issue key (e.g. MCP-4) for 'Specific issue(s)'.")
+        return f"key in ({', '.join(keys)})"
+    if scope == "all":
+        return f"project = {project_key} AND issuetype = Story"
+    if scope == "unestimated":
+        # cf[<number>] addresses the custom field by id, not display name -
+        # JIRA_STORY_POINTS_FIELD is "customfield_10016"; JQL wants "10016".
+        field_number = _jira.config.story_points_field.rsplit("_", 1)[-1]
+        return f"project = {project_key} AND issuetype = Story AND cf[{field_number}] is EMPTY"
+    raise ValueError(f"Unknown scope {scope!r}")
+
+
+@app.post("/agent-console/run")
+async def agent_console_run(
+    scope: str = Form(...),
+    specific_issues: str = Form(default=""),
+    instructions: str = Form(default=""),
+    level: str = Form(...),
+):
+    """Runs the orchestrator synchronously and redirects into the existing
+    review surface once it reaches awaiting_review. Blocks for the
+    duration of the LLM's tool-use loop - no background job queue, see
+    docs/slice-3.md section 2 (explicitly out of scope for this slice).
+    """
+    try:
+        target_jql = _build_target_jql(scope, specific_issues)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        run_id = await run_reestimate_task(level=level, target_jql=target_jql, instructions=instructions)
+    except OrchestratorError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 
 
 @app.get("/runs/{run_id}")

@@ -54,6 +54,17 @@ Notes that matter:
   succeed without a token the human's browser issued.
 - **L5 (no human in the loop) does not exist in this system, deliberately.**
 
+**Product-facing names (2026-09-10) diverge from the table above, on purpose.** The names in
+this table are Assalaarachchi et al.'s academic framework (arXiv:2601.16392) — keep using
+them here, in the report, and in the viva; they're the citable grounding and the mapping is
+almost exact (their own worked example for "Human-AI Collaborative" is effort estimation,
+this project's own task). But asked directly, a naive user found `L2`/`L3`/`L4` plus jargon
+subtitles unusable in the actual UI. `app/levels.py` now maps each code to a separate,
+friendlier product name shown in the app itself: `L2` → **Co-Pilot**, `L3` → **Drafter**,
+`L4` → **Autopilot** (`L1` → **Advisor**, not reachable through the UI since it has no write
+tools to drive this task type at all). This is presentation-only — `TOOLS_BY_LEVEL`,
+`AGENTIC_PM_LEVEL`, `runs.level`, and every test still use `"L1"`.."L4"` exactly as before.
+
 ### Guardrails sit above the levels
 
 Guardrails are server-side validators in the gateway. They apply identically at L1 and L4.
