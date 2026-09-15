@@ -22,7 +22,7 @@ LEVEL_DISPLAY: dict[str, dict[str, str]] = {
         "tagline": "Drafts proposals - you can edit before anything is sent",
     },
     "L3": {
-        "name": "Drafter",
+        "name": "Analyst",
         "tagline": "Prepares a finished proposal - you approve it or send it back",
     },
     "L4": {

@@ -45,25 +45,30 @@
         <label class="radio-option mode-option">
           <input type="radio" name="level" value="L2">
           <span class="mode-option-text">
-            <strong>Co-Pilot</strong>
+            <strong>{{ level_name("L2") }}</strong>
             <span class="muted">{{ level_tagline("L2") }}</span>
           </span>
         </label>
         <label class="radio-option mode-option">
           <input type="radio" name="level" value="L3" checked>
           <span class="mode-option-text">
-            <strong>Drafter</strong>
+            <strong>{{ level_name("L3") }}</strong>
             <span class="muted">{{ level_tagline("L3") }}</span>
           </span>
         </label>
         <label class="radio-option mode-option">
           <input type="radio" name="level" value="L4">
           <span class="mode-option-text">
-            <strong>Autopilot</strong>
+            <strong>{{ level_name("L4") }}</strong>
             <span class="muted">{{ level_tagline("L4") }}</span>
           </span>
         </label>
       </fieldset>
+
+      <p class="edited-note">
+        Want to just ask questions about your Jira project instead of running a task? Try
+        <a href="/chat">{{ level_name("L1") }} chat</a> &mdash; read-only, no proposal is staged.
+      </p>
 
       <button type="submit" class="approve run-btn">Run</button>
     </form>
