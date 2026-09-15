@@ -26,15 +26,15 @@
 
     {% if run["level"] == "L2" %}
       <p class="mode-note">
-        <strong>Co-Pilot mode</strong> &mdash; {{ level_tagline("L2") }}. Edit any value below, then Approve.
+        <strong>{{ level_name("L2") }} mode</strong> &mdash; {{ level_tagline("L2") }}. Edit any value below, then Approve.
       </p>
     {% elif run["level"] == "L3" %}
       <p class="mode-note">
-        <strong>Drafter mode</strong> &mdash; {{ level_tagline("L3") }}. The values below are locked.
+        <strong>{{ level_name("L3") }} mode</strong> &mdash; {{ level_tagline("L3") }}. The values below are locked.
       </p>
     {% elif run["level"] == "L4" %}
       <p class="mode-note">
-        <strong>Autopilot mode</strong> &mdash; acknowledge each change individually, then issue a
+        <strong>{{ level_name("L4") }} mode</strong> &mdash; acknowledge each change individually, then issue a
         token. Only the agent itself can spend that token to write to Jira &mdash; approving never
         happens directly here.
       </p>
@@ -55,7 +55,7 @@
             <th>Old value</th>
             <th>New value</th>
             <th>Reasoning</th>
-            <th>Confidence</th>
+            <th>Assumptions</th>
             {% if ack_mode %}<th>Acknowledged</th>{% endif %}
           </tr>
         </thead>
@@ -78,7 +78,13 @@
                 {% endif %}
               </td>
               <td class="reasoning-cell">{{ change["reasoning"] }}</td>
-              <td><span class="confidence-pill">{{ "%.0f"|format(change["confidence"] * 100) }}%</span></td>
+              <td class="assumptions-cell">
+                {% if change["assumptions"] and change["assumptions"] != "NA" %}
+                  {{ change["assumptions"] }}
+                {% else %}
+                  <span class="muted">NA</span>
+                {% endif %}
+              </td>
               {% if ack_mode %}
                 <td>
                   <form method="post" action="/runs/{{ run['id'] }}/changes/{{ change['id'] }}/acknowledge" class="ack-form">

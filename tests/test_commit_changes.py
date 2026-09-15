@@ -22,7 +22,7 @@ def tools_l4(conn, jira_with_spy):
 def _seed_run_with_change(tools: GatewayTools) -> str:
     run_id = tools.start_run(task_type="reestimate", scope="project = TEST")
     tools.propose_estimate_change(
-        run_id, "TEST-1", new_points=5, reasoning="Reasoning long enough to pass validation.", confidence=0.9
+        run_id, "TEST-1", new_points=5, reasoning="Reasoning long enough to pass validation.", assumptions="NA"
     )
     tools.finish_run(run_id)
     return run_id

@@ -78,11 +78,9 @@ def main() -> int:
         ).fetchall()
         print("\n3. Staged proposals (Gemini's own reasoning - nothing pre-scripted):")
         for c in changes:
-            print(
-                f"  {c['issue_key']}  {c['field']}: {c['old_value']} -> {c['new_value']}"
-                f"  (confidence={c['confidence']:.2f})"
-            )
+            print(f"  {c['issue_key']}  {c['field']}: {c['old_value']} -> {c['new_value']}")
             print(f"      reasoning: {c['reasoning']}")
+            print(f"      assumptions: {c['assumptions']}")
 
         print(f"\n4. Go review (and approve or send back) this run in the browser:")
         print(f"   {APP_URL}/runs/{run_id}")

@@ -41,7 +41,7 @@ class _FakeModels:
                     "issue_key": "TEST-1",
                     "new_points": 3,
                     "reasoning": "Scripted test reasoning long enough to pass validation.",
-                    "confidence": 0.7,
+                    "assumptions": "NA",
                 },
             ),
             lambda: genai_types.Part.from_function_call(name="finish_run", args={"run_id": run_id}),

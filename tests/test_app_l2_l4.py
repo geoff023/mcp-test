@@ -31,7 +31,7 @@ def _seed_run(conn, jira, level: str) -> tuple[str, str]:
     tools = GatewayTools(jira=jira, conn=conn, level=level)
     run_id = tools.start_run(task_type="reestimate", scope="project = TEST")
     tools.propose_estimate_change(
-        run_id, "TEST-1", new_points=5, reasoning="Reasoning long enough to pass validation.", confidence=0.7
+        run_id, "TEST-1", new_points=5, reasoning="Reasoning long enough to pass validation.", assumptions="NA"
     )
     tools.finish_run(run_id)
     change_id = conn.execute(

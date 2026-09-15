@@ -73,14 +73,12 @@ def main() -> int:
         # 1. Current story points for the target issues, read from Jira.
         _print_points(client, issue_keys, "1. Current state in Jira, before approval:")
 
-        # 2. The staged proposals from the DB, with reasoning and confidence.
+        # 2. The staged proposals from the DB, with reasoning and assumptions.
         print("\n2. Staged proposals (from the local DB - never yet touched Jira):")
         for c in changes:
-            print(
-                f"  {c['issue_key']}  {c['field']}: {c['old_value']} -> {c['new_value']}"
-                f"  (confidence={c['confidence']:.2f})"
-            )
+            print(f"  {c['issue_key']}  {c['field']}: {c['old_value']} -> {c['new_value']}")
             print(f"      reasoning: {c['reasoning']}")
+            print(f"      assumptions: {c['assumptions']}")
 
         # 3. A pause telling the operator to approve in the browser.
         print("\n3. Go approve (or send back) this run in the browser:")

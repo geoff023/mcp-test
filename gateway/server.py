@@ -53,12 +53,14 @@ def _issue_summary(issue: Issue) -> dict:
     }
 
 
-def _validate_proposal(reasoning: str, confidence: float) -> None:
-    if not (0.0 <= confidence <= 1.0):
-        raise ValueError("confidence must be between 0.0 and 1.0")
+def _validate_proposal(reasoning: str, assumptions: str) -> None:
     if len(reasoning) < 20:
         raise ValueError(
             "reasoning must be at least 20 characters - an unexplained proposal is not a proposal"
+        )
+    if not assumptions or not assumptions.strip():
+        raise ValueError(
+            "assumptions must not be empty - state what was assumed, or pass exactly 'NA' if nothing was"
         )
 
 
@@ -132,14 +134,14 @@ class GatewayTools:
         return run_id
 
     def propose_estimate_change(
-        self, run_id: str, issue_key: str, new_points: float, reasoning: str, confidence: float
+        self, run_id: str, issue_key: str, new_points: float, reasoning: str, assumptions: str
     ) -> str:
         """Stage a story-point re-estimate for one issue. Writes only to the
         staging table - never touches Jira - so the proposal cannot be
-        applied until a human approves it. Rejects confidence outside 0-1
-        and reasoning shorter than 20 characters. Returns the staged_change_id.
+        applied until a human approves it. Rejects reasoning shorter than 20
+        characters and an empty assumptions string. Returns the staged_change_id.
         """
-        _validate_proposal(reasoning, confidence)
+        _validate_proposal(reasoning, assumptions)
         change_id = str(uuid.uuid4())
         with self._lock:
             # old_value is left NULL deliberately: fetching it would mean an
@@ -149,9 +151,9 @@ class GatewayTools:
             # surface fetches the live value again when it renders.
             self.conn.execute(
                 "INSERT INTO staged_changes "
-                "(id, run_id, issue_key, field, old_value, new_value, reasoning, confidence) "
+                "(id, run_id, issue_key, field, old_value, new_value, reasoning, assumptions) "
                 "VALUES (?, ?, ?, 'story_points', NULL, ?, ?, ?)",
-                (change_id, run_id, issue_key, str(new_points), reasoning, confidence),
+                (change_id, run_id, issue_key, str(new_points), reasoning, assumptions),
             )
             self.conn.commit()
             log_audit(
@@ -166,14 +168,14 @@ class GatewayTools:
         return change_id
 
     def propose_due_date_change(
-        self, run_id: str, issue_key: str, new_due_date: str, reasoning: str, confidence: float
+        self, run_id: str, issue_key: str, new_due_date: str, reasoning: str, assumptions: str
     ) -> str:
         """Stage a due-date change for one issue. Slice 1 has no date-changing
         UI yet - this tool exists solely to demonstrate the
         no_milestone_date_change guardrail: any issue that is an Epic or
         carries the 'milestone' label is refused here, at every level.
         """
-        _validate_proposal(reasoning, confidence)
+        _validate_proposal(reasoning, assumptions)
         with self._lock:
             issue = self.jira.get_issue(issue_key)
             check_no_milestone_date_change(
@@ -182,9 +184,9 @@ class GatewayTools:
             change_id = str(uuid.uuid4())
             self.conn.execute(
                 "INSERT INTO staged_changes "
-                "(id, run_id, issue_key, field, old_value, new_value, reasoning, confidence) "
+                "(id, run_id, issue_key, field, old_value, new_value, reasoning, assumptions) "
                 "VALUES (?, ?, ?, 'due_date', ?, ?, ?, ?)",
-                (change_id, run_id, issue_key, issue.due_date, new_due_date, reasoning, confidence),
+                (change_id, run_id, issue_key, issue.due_date, new_due_date, reasoning, assumptions),
             )
             self.conn.commit()
             log_audit(
@@ -202,7 +204,7 @@ class GatewayTools:
         """Mark a run awaiting_review and return a summary for the human."""
         with self._lock:
             rows = self.conn.execute(
-                "SELECT issue_key, field, new_value, confidence FROM staged_changes WHERE run_id = ?",
+                "SELECT issue_key, field, new_value, assumptions FROM staged_changes WHERE run_id = ?",
                 (run_id,),
             ).fetchall()
             self.conn.execute("UPDATE runs SET status = 'awaiting_review' WHERE id = ?", (run_id,))
@@ -220,7 +222,7 @@ class GatewayTools:
             "run_id": run_id,
             "status": "awaiting_review",
             "staged_changes": [
-                {"issue_key": k, "field": f, "new_value": v, "confidence": c} for k, f, v, c in rows
+                {"issue_key": k, "field": f, "new_value": v, "assumptions": a} for k, f, v, a in rows
             ],
         }
 

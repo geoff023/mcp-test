@@ -58,11 +58,9 @@ def _print_points(client: JiraClient, issue_keys: list[str], heading: str) -> No
 def _print_proposals(changes: list[sqlite3.Row]) -> None:
     print("\nStaged proposals (agent's original values):")
     for c in changes:
-        print(
-            f"  {c['issue_key']}  {c['field']}: {c['old_value']} -> {c['new_value']}"
-            f"  (confidence={c['confidence']:.2f})"
-        )
+        print(f"  {c['issue_key']}  {c['field']}: {c['old_value']} -> {c['new_value']}")
         print(f"      reasoning: {c['reasoning']}")
+        print(f"      assumptions: {c['assumptions']}")
 
 
 def _print_audit(conn: sqlite3.Connection, run_id: str) -> None:

@@ -19,8 +19,11 @@ estimating.
 given.
 3. For every issue you are re-estimating, call propose_estimate_change with your new point \
 value, a specific reasoning string (at least 20 characters - explain the actual complexity, \
-risk, or scope you observed, not a generic sentence), and a confidence between 0.0 and 1.0 \
-that honestly reflects how sure you are.
+risk, or scope you observed, not a generic sentence), and an assumptions string: state \
+plainly any assumption you made that a PM should know about before trusting this number (an \
+unclear acceptance criterion, an unknown dependency, guessing at scope not stated in the \
+description, etc). If you made no real assumption, pass exactly the string "NA" - do not \
+invent one just to fill the field.
 4. Once you have proposed a value for every issue in scope, call finish_run exactly once. Do \
 not call it more than once, and do not call it before you have proposed something for every \
 issue you intend to estimate.
