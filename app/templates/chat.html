@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ level_name("L1") }} chat - Agentic PM{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>{{ level_name("L1") }} chat</h1>
+    <span class="level-pill level-L1">{{ level_name("L1") }} <span class="level-code">(L1)</span></span>
+  </div>
+  <p class="intro-note">
+    {{ level_tagline("L1") }}. Ask about issues, estimates, or status &mdash; the assistant can only
+    read Jira, it structurally has no tool to change anything. Use the
+    <a href="/agent-console">Agent console</a> to actually stage or apply a change.
+  </p>
+
+  <div class="card chat-card">
+    {% if not messages %}
+      <p class="empty">No messages yet. Try "which stories have no estimate?" or "what's the status of MCP-4?"</p>
+    {% else %}
+      <div class="chat-thread">
+        {% for m in messages %}
+          <div class="chat-msg chat-msg-{{ m['role'] }}">
+            <span class="chat-msg-role">{{ "You" if m["role"] == "user" else level_name("L1") }}</span>
+            <p>{{ m["content"] }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" action="/chat" class="chat-form">
+      <textarea name="message" placeholder="Ask about your Jira project..." required></textarea>
+      <button type="submit" class="approve run-btn">Send</button>
+    </form>
+  </div>
+{% endblock %}

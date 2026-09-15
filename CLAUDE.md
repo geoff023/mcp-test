@@ -20,7 +20,16 @@ more rigorous rather than adding another agent capability.
 ### What we are NOT building
 
 - A project management tool. No backlog CRUD, no board, no gantt. Jira does that.
-- A chat assistant. There is no chat panel anywhere in this product.
+- A general chat assistant. **Amended 2026-09-15**: the original line here was "there is no
+  chat panel anywhere in this product," full stop. Slice 4 adds one narrow exception: an L1
+  (Advisor) conversational Q&A surface at `/chat` (`orchestrator/chat.py`), explicitly
+  requested to make L1 usable at all — until slice 4, L1 had no UI entry point whatsoever
+  (see `app/levels.py`'s old comment). It is not a general assistant: it is spawned with
+  `AGENTIC_PM_LEVEL=L1` exactly like every other orchestrator call, so it structurally only
+  ever gets `search_issues`/`get_issue` — the same tool-gating mechanism from section 2
+  applies to it, it just happens to be interactive instead of one-shot. It cannot stage or
+  apply anything, cannot be reconfigured from the UI to a higher level, and there is still no
+  chat surface at L2/L3/L4 or anywhere else in the product.
 - Anything that talks to a real email server, calendar, or meeting recorder.
 
 ---
@@ -60,10 +69,14 @@ them here, in the report, and in the viva; they're the citable grounding and the
 almost exact (their own worked example for "Human-AI Collaborative" is effort estimation,
 this project's own task). But asked directly, a naive user found `L2`/`L3`/`L4` plus jargon
 subtitles unusable in the actual UI. `app/levels.py` now maps each code to a separate,
-friendlier product name shown in the app itself: `L2` → **Co-Pilot**, `L3` → **Drafter**,
-`L4` → **Autopilot** (`L1` → **Advisor**, not reachable through the UI since it has no write
-tools to drive this task type at all). This is presentation-only — `TOOLS_BY_LEVEL`,
+friendlier product name shown in the app itself: `L2` → **Co-Pilot**, `L3` → **Analyst**,
+`L4` → **Autopilot** (`L1` → **Advisor**). This is presentation-only — `TOOLS_BY_LEVEL`,
 `AGENTIC_PM_LEVEL`, `runs.level`, and every test still use `"L1"`.."L4"` exactly as before.
+
+**Renamed 2026-09-15**: `L3` was originally **Drafter**; changed to **Analyst** because
+"Drafter" read as a documentation-writing agent, not a PM agent that prepares a finished,
+locked proposal for review. Same day, `L1`/**Advisor** stopped being unreachable through the
+UI — see the chat-panel amendment above.
 
 ### Guardrails sit above the levels
 

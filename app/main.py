@@ -27,6 +27,7 @@ from db.migrate import get_connection
 from gateway.apply import apply_staged_changes
 from gateway.jira import JiraClient
 from orchestrator.agent import OrchestratorError, run_reestimate_task
+from orchestrator.chat import ChatError, run_chat_turn
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -346,3 +347,70 @@ def show_audit(request: Request):
     with _lock:
         rows = _conn.execute("SELECT * FROM audit_log ORDER BY id DESC").fetchall()
     return templates.TemplateResponse(request, "audit.html", {"rows": rows})
+
+
+# ---------- L1 (Advisor) chat - read-only, see orchestrator/chat.py ----------
+
+CHAT_AGENT_IDENTITY = "agent:orchestrator:chat"
+
+
+def _get_or_create_chat_session() -> str:
+    """One ongoing conversation, the same "exactly one implicit reviewer"
+    simplification slice 1 made for HUMAN_ACTOR - no login, no session
+    picker, just the single thread this deployment has."""
+    row = _conn.execute("SELECT id FROM chat_sessions ORDER BY created_at DESC LIMIT 1").fetchone()
+    if row is not None:
+        return row["id"]
+    session_id = str(uuid.uuid4())
+    _conn.execute("INSERT INTO chat_sessions (id, created_at) VALUES (?, ?)", (session_id, _now()))
+    _conn.commit()
+    return session_id
+
+
+@app.get("/chat")
+def show_chat(request: Request):
+    with _lock:
+        session_id = _get_or_create_chat_session()
+        messages = _conn.execute(
+            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id", (session_id,)
+        ).fetchall()
+    return templates.TemplateResponse(request, "chat.html", {"messages": messages})
+
+
+@app.post("/chat")
+async def post_chat(message: str = Form(...)):
+    with _lock:
+        session_id = _get_or_create_chat_session()
+        history = _conn.execute(
+            "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id", (session_id,)
+        ).fetchall()
+    history_dicts = [{"role": row["role"], "content": row["content"]} for row in history]
+
+    try:
+        answer, tool_calls = await run_chat_turn(history=history_dicts, message=message)
+        outcome = "answered"
+    except ChatError as exc:
+        answer = f"Sorry, I couldn't answer that: {exc}"
+        tool_calls = []
+        outcome = "failed"
+
+    with _lock:
+        _conn.execute(
+            "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'user', ?, ?)",
+            (session_id, message, _now()),
+        )
+        _conn.execute(
+            "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'agent', ?, ?)",
+            (session_id, answer, _now()),
+        )
+        _conn.commit()
+        log_audit(
+            _conn,
+            run_id=None,
+            actor=CHAT_AGENT_IDENTITY,
+            level="L1",
+            action="chat_turn",
+            outcome=outcome,
+            detail=f"tool_calls={tool_calls}" if tool_calls else "no tool calls",
+        )
+    return RedirectResponse(url="/chat", status_code=303)

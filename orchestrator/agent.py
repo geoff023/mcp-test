@@ -15,18 +15,24 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types as genai_types
-from mcp import types as mcp_types
 from mcp.client import Client
 from mcp.client.stdio import StdioServerParameters
 
+from orchestrator.mcp_bridge import (
+    REPO_ROOT,
+    agent_identity,
+    function_response_payload,
+    mcp_tools_to_gemini,
+    model_id,
+    tool_result_payload,
+)
 from orchestrator.prompts import REESTIMATE_SYSTEM_PROMPT, build_task_prompt
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 load_dotenv(_REPO_ROOT / ".env")
 
 MAX_TOOL_CALLS = 80
@@ -57,46 +63,6 @@ class OrchestratorError(Exception):
     the "ask the model to please behave" pattern CLAUDE.md warns against -
     see docs/slice-3.md section 3.
     """
-
-
-def _model_id() -> str:
-    return os.environ.get("ORCHESTRATOR_MODEL", "gemini-3.6-flash")
-
-
-def _agent_identity() -> str:
-    return f"orchestrator:{_model_id()}"
-
-
-def _mcp_tools_to_gemini(tools: list[mcp_types.Tool]) -> genai_types.Tool:
-    """Convert an MCP tool listing into Gemini function declarations.
-
-    parameters_json_schema takes the tool's JSON Schema directly - MCP and
-    Gemini both describe tool parameters as JSON Schema, so this is a
-    pass-through, not a translation.
-    """
-    declarations = [
-        genai_types.FunctionDeclaration(
-            name=tool.name,
-            description=tool.description or "",
-            parameters_json_schema=tool.input_schema,
-        )
-        for tool in tools
-    ]
-    return genai_types.Tool(function_declarations=declarations)
-
-
-def _tool_result_payload(result: mcp_types.CallToolResult) -> object:
-    """Prefer structured_content - it matches the tool's Python return type
-    exactly (a dict for dict-returning tools, the bare string for str-
-    returning ones like start_run). Falls back to the first text block for
-    any result that somehow has none."""
-    if result.structured_content is not None:
-        return result.structured_content
-    for block in result.content:
-        text = getattr(block, "text", None)
-        if text is not None:
-            return text
-    return None
 
 
 async def run_reestimate_task(
@@ -132,18 +98,18 @@ async def run_reestimate_task(
             env={
                 **os.environ,
                 "AGENTIC_PM_LEVEL": level,
-                "AGENTIC_PM_AGENT": _agent_identity(),
+                "AGENTIC_PM_AGENT": agent_identity(),
             },
         )
 
     gemini_client = gemini or genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    model = _model_id()
+    model = model_id()
 
     async with Client(mcp_server) as mcp_client:
         tools_result = await mcp_client.list_tools()
         config = genai_types.GenerateContentConfig(
             system_instruction=REESTIMATE_SYSTEM_PROMPT,
-            tools=[_mcp_tools_to_gemini(tools_result.tools)],
+            tools=[mcp_tools_to_gemini(tools_result.tools)],
             automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
         )
 
@@ -188,7 +154,7 @@ async def run_reestimate_task(
             for call in function_calls:
                 calls_made += 1
                 result = await mcp_client.call_tool(call.name, dict(call.args or {}))
-                payload = _tool_result_payload(result)
+                payload = tool_result_payload(result)
 
                 if call.name == "start_run" and not result.is_error and run_id is None:
                     # start_run returns a bare str in Python, but MCP wraps a
@@ -204,21 +170,15 @@ async def run_reestimate_task(
                 if call.name == "finish_run" and not result.is_error:
                     finished = True
 
-                if result.is_error:
-                    response_payload = {"error": payload}
-                elif isinstance(payload, dict):
-                    # MCP already wraps any non-object structured_content as
-                    # {"result": <value>} (see the start_run comment above) -
-                    # a dict-shaped payload, wrapped or a tool's natural dict
-                    # return alike, goes to the model as-is. Wrapping it again
-                    # here produced {"result": {"result": ...}}, which the
-                    # scripted test in tests/test_orchestrator.py caught by
-                    # re-parsing exactly what a real model receives; Gemini
-                    # itself shrugged it off by reading the value out
-                    # semantically regardless of nesting.
-                    response_payload = payload
-                else:
-                    response_payload = {"result": payload}
+                # See orchestrator/mcp_bridge.function_response_payload for
+                # why a dict-shaped payload goes back as-is rather than
+                # wrapped again - double-wrapping produced
+                # {"result": {"result": ...}}, which the scripted test in
+                # tests/test_orchestrator.py caught by re-parsing exactly
+                # what a real model receives; Gemini itself shrugged it off
+                # by reading the value out semantically regardless of
+                # nesting.
+                response_payload = function_response_payload(call.name, result.is_error, payload)
 
                 response_parts.append(
                     genai_types.Part.from_function_response(name=call.name, response=response_payload)
