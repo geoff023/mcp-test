@@ -26,6 +26,66 @@ def client(conn, jira_with_spy, monkeypatch):
     return TestClient(app_main.app), spy
 
 
+def test_agent_console_prefills_scope_from_the_query_string(client):
+    """The dashboard's "N stories not yet estimated" suggestion links to
+    /agent-console?scope=unestimated so a human doesn't have to re-make a
+    choice they were just told the answer to."""
+    test_client, _ = client
+
+    resp = test_client.get("/agent-console?scope=all")
+
+    assert resp.status_code == 200
+    assert 'value="all" checked' in resp.text
+    assert 'value="unestimated" checked' not in resp.text
+
+
+def test_agent_console_defaults_scope_to_unestimated_with_no_query_string(client):
+    test_client, _ = client
+
+    resp = test_client.get("/agent-console")
+
+    assert 'value="unestimated" checked' in resp.text
+
+
+def test_agent_console_defaults_level_to_l3_with_no_query_string(client):
+    test_client, _ = client
+
+    resp = test_client.get("/agent-console")
+
+    assert 'value="L3" checked' in resp.text
+    assert 'value="L1" checked' not in resp.text
+
+
+def test_agent_console_prefills_level_from_the_query_string(client):
+    """POST /chat's redirect_to sends a human back here with ?level=L1
+    after sending a message - the wizard's own JS (not tested here, this
+    only checks the server-rendered state it reads) then reopens on the
+    embedded chat step using this."""
+    test_client, _ = client
+
+    resp = test_client.get("/agent-console?level=L1")
+
+    assert resp.status_code == 200
+    assert 'value="L1" checked' in resp.text
+
+
+def test_agent_console_get_embeds_the_chat_thread(client, conn):
+    """The console always loads the L1 chat history (see agent_console()'s
+    docstring), not only when level=L1, so switching to the embedded chat
+    step client-side never needs a second request."""
+    test_client, _ = client
+    conn.execute("INSERT INTO chat_sessions (id, created_at) VALUES ('s1', '2026-01-01T00:00:00+00:00')")
+    conn.execute(
+        "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES "
+        "('s1', 'user', 'which stories have no estimate?', '2026-01-01T00:00:01+00:00')"
+    )
+    conn.commit()
+
+    resp = test_client.get("/agent-console")
+
+    assert "which stories have no estimate?" in resp.text
+
+
 def _insert_run(conn, run_id: str, status: str) -> None:
     conn.execute(
         "INSERT INTO runs (id, level, task_type, agent, scope, created_at, status) "
@@ -76,12 +136,12 @@ def test_agent_console_run_surfaces_orchestrator_failure_as_502(client, monkeypa
     assert "never called finish_run" in resp.text
 
 
-def test_agent_console_run_redirects_l1_to_chat_without_calling_the_orchestrator(client, monkeypatch):
+def test_agent_console_run_redirects_l1_back_to_the_chat_step_without_calling_the_orchestrator(client, monkeypatch):
     """L1 has no start_run tool - see TOOLS_BY_LEVEL in gateway/server.py -
     so this route must never hand it to run_reestimate_task at all, not
-    even to let it fail with a 502. The form's own JS already redirects
-    before the POST happens; this is the same guard for anyone who posts
-    here directly."""
+    even to let it fail with a 502. The wizard's own JS shows the embedded
+    chat step instead of submitting when L1 is selected; this is the same
+    guard for anyone who posts here directly or has JS disabled."""
     test_client, _ = client
 
     async def unexpected_run_reestimate_task(*, level, target_jql, instructions):
@@ -96,7 +156,7 @@ def test_agent_console_run_redirects_l1_to_chat_without_calling_the_orchestrator
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/chat"
+    assert resp.headers["location"] == "/agent-console?level=L1"
 
 
 def test_agent_console_run_rejects_empty_specific_issues(client):

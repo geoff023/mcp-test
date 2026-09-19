@@ -7,10 +7,19 @@
       <span class="awaiting-review-badge">{{ awaiting_review_count }} awaiting review</span>
     {% endif %}
   </div>
+  <p class="page-subtitle">
+    Every task an agent has run, and what happened to it. Nothing here has touched Jira until
+    a run's status says <strong>applied</strong>.
+  </p>
 
+  <h2>All runs</h2>
   <div class="card">
     {% if not runs %}
-      <p class="empty">No runs yet. Start one from the <a href="/agent-console">Agent console</a>.</p>
+      <p class="empty">
+        No runs yet. Ask the agent to do something from the <a href="/agent-console">Agent
+        console</a>, or ask a question first in <a href="/chat">Chat</a> &mdash; anything it
+        proposes will show up here for you to review.
+      </p>
     {% else %}
       <table>
         <thead>

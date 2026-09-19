@@ -76,6 +76,48 @@ def test_chat_post_survives_a_chat_error_and_still_records_the_exchange(client, 
     assert outcome == "failed"
 
 
+def test_chat_post_honours_redirect_to_agent_console(client, monkeypatch):
+    """The embedded chat step in agent_console.html sets redirect_to so
+    sending a message reopens the console on the chat step instead of
+    always landing on the standalone /chat page."""
+    test_client, _ = client
+
+    async def fake_run_chat_turn(*, history, message):
+        return "answer", []
+
+    monkeypatch.setattr(app_main, "run_chat_turn", fake_run_chat_turn)
+
+    resp = test_client.post(
+        "/chat",
+        data={"message": "hi", "redirect_to": "/agent-console?level=L1"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/agent-console?level=L1"
+
+
+def test_chat_post_rejects_an_unknown_redirect_to(client, monkeypatch):
+    """redirect_to is form input, not a hardcoded template value - only a
+    fixed allowlist of targets is honoured, anything else falls back to
+    the safe default rather than being trusted as-is."""
+    test_client, _ = client
+
+    async def fake_run_chat_turn(*, history, message):
+        return "answer", []
+
+    monkeypatch.setattr(app_main, "run_chat_turn", fake_run_chat_turn)
+
+    resp = test_client.post(
+        "/chat",
+        data={"message": "hi", "redirect_to": "https://evil.example/steal"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/chat"
+
+
 def test_chat_get_shows_prior_messages_in_order(client, conn, monkeypatch):
     test_client, _ = client
 

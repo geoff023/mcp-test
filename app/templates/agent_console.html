@@ -1,100 +1,250 @@
 {% extends "base.html" %}
+{% import "_chat_thread.html" as chat_thread_macro %}
 {% block title %}Agent console - Agentic PM{% endblock %}
 {% block content %}
   <div class="page-head">
     <h1>Agent console</h1>
   </div>
-  <p class="intro-note">
+  <p class="page-subtitle">
     Defines and runs a task through Gemini instead of a human typing a prompt into Claude
     Code. One task type for now &mdash; the rest are future work.
   </p>
 
-  <div class="card">
-    <form method="post" action="/agent-console/run" class="agent-console-form">
-      <label>
-        Task type
-        <select disabled>
-          <option selected>Effort Estimation</option>
-        </select>
-      </label>
+  <nav class="stepper" aria-label="Progress">
+    <span class="stepper-item" id="stepper-item-1" data-step="1">
+      <span class="stepper-badge">1</span> Define the task
+    </span>
+    <span class="stepper-connector"></span>
+    <span class="stepper-item" id="stepper-item-2" data-step="2">
+      <span class="stepper-badge">2</span> Working mode
+    </span>
+    <span class="stepper-connector"></span>
+    <span class="stepper-item" id="stepper-item-3" data-step="3">
+      <span class="stepper-badge">3</span> <span id="stepper-label-3">Run</span>
+    </span>
+  </nav>
 
-      <fieldset class="scope-picker">
-        <legend>Which issues?</legend>
-        <label class="radio-option">
-          <input type="radio" name="scope" value="unestimated" checked>
-          Stories with no estimate yet (recommended)
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="scope" value="all">
-          All stories in this project
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="scope" value="specific">
-          Specific issue(s)
-          <input type="text" name="specific_issues" placeholder="e.g. MCP-4, MCP-5" class="scope-specific-input">
-        </label>
-      </fieldset>
+  <form method="post" action="/agent-console/run" class="agent-console-form" id="task-form">
+    <input type="hidden" name="task_type" value="reestimate">
 
-      <label>
-        Instructions (optional)
-        <textarea name="instructions" placeholder="Anything the agent should know before estimating..."></textarea>
-      </label>
+    <section class="console-panel card" id="step-1">
+      <div class="console-step">
+        <span class="step-number" aria-hidden="true">1</span>
+        <div class="step-body">
+          <span class="step-title">What should the agent do?</span>
+          <div class="chip-grid">
+            <span class="chip chip-selected">Effort Estimation</span>
+            <span class="chip chip-disabled">Weekly Status Report <em>Soon</em></span>
+            <span class="chip chip-disabled">Standup / Meeting Digest <em>Soon</em></span>
+            <span class="chip chip-disabled">Risk Scan / Report <em>Soon</em></span>
+            <span class="chip chip-disabled">Sprint Planning <em>Soon</em></span>
+            <span class="chip chip-disabled">Retrospective Synthesis <em>Soon</em></span>
+          </div>
+        </div>
+      </div>
 
-      <fieldset class="scope-picker">
-        <legend>Working mode</legend>
-        <label class="radio-option mode-option">
-          <input type="radio" name="level" value="L1" id="level-l1">
-          <span class="mode-option-text">
-            <strong>{{ level_name("L1") }}</strong>
-            <span class="muted">{{ level_tagline("L1") }} &mdash; read-only chat, no proposal is staged</span>
-          </span>
-        </label>
-        <label class="radio-option mode-option">
-          <input type="radio" name="level" value="L2">
-          <span class="mode-option-text">
-            <strong>{{ level_name("L2") }}</strong>
-            <span class="muted">{{ level_tagline("L2") }}</span>
-          </span>
-        </label>
-        <label class="radio-option mode-option">
-          <input type="radio" name="level" value="L3" checked>
-          <span class="mode-option-text">
-            <strong>{{ level_name("L3") }}</strong>
-            <span class="muted">{{ level_tagline("L3") }}</span>
-          </span>
-        </label>
-        <label class="radio-option mode-option">
-          <input type="radio" name="level" value="L4">
-          <span class="mode-option-text">
-            <strong>{{ level_name("L4") }}</strong>
-            <span class="muted">{{ level_tagline("L4") }}</span>
-          </span>
-        </label>
-      </fieldset>
+      <div class="console-step">
+        <span class="step-number" aria-hidden="true">2</span>
+        <div class="step-body">
+          <fieldset class="scope-picker">
+            <legend>Which issues?</legend>
+            <label class="radio-option">
+              <input type="radio" name="scope" value="unestimated" {{ "checked" if default_scope == "unestimated" else "" }}>
+              Stories with no estimate yet (recommended)
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="scope" value="all" {{ "checked" if default_scope == "all" else "" }}>
+              All stories in this project
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="scope" value="specific" {{ "checked" if default_scope == "specific" else "" }}>
+              Specific issue(s)
+              <input type="text" name="specific_issues" placeholder="e.g. MCP-4, MCP-5" class="scope-specific-input">
+            </label>
+          </fieldset>
+        </div>
+      </div>
 
-      <button type="submit" class="approve run-btn">Run</button>
+      <div class="console-step">
+        <span class="step-number" aria-hidden="true">3</span>
+        <div class="step-body">
+          <label class="step-title" for="instructions">
+            Anything else the agent should know?
+            <span class="step-hint">(optional)</span>
+          </label>
+          <textarea id="instructions" name="instructions" placeholder="Anything the agent should know before estimating..."></textarea>
+        </div>
+      </div>
+
+      <div class="console-actions">
+        <span></span>
+        <button type="button" class="btn-primary" data-next>Next: Working mode &rarr;</button>
+      </div>
+    </section>
+
+    <section class="console-panel card" id="step-2" hidden>
+      <span class="step-title">How much autonomy should it have?</span>
+      <div class="level-card-grid">
+        {% for level in ("L1", "L2", "L3", "L4") %}
+          <label class="level-card level-card-{{ level }}">
+            <span class="level-card-head">
+              <input type="radio" name="level" value="{{ level }}" {{ "checked" if default_level == level else "" }}>
+              <span class="level-card-name">{{ level_name(level) }}</span>
+            </span>
+            <span class="level-card-tagline">{{ level_tagline(level) }}</span>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="level-detail">
+        <div class="level-detail-may">
+          <div class="level-detail-col-title">May</div>
+          <div id="level-detail-may-text"></div>
+        </div>
+        <div class="level-detail-may-not">
+          <div class="level-detail-col-title">May not</div>
+          <div id="level-detail-may-not-text"></div>
+        </div>
+      </div>
+
+      <div class="console-actions">
+        <button type="button" class="btn-secondary" data-back>&larr; Back</button>
+        <button type="button" class="btn-primary" data-next id="step-2-next">Next &rarr;</button>
+      </div>
+    </section>
+
+    <section class="console-panel card" id="step-3-run" hidden>
+      <span class="step-title">Ready to run</span>
+      <p class="chart-caption" id="run-summary"></p>
+
+      <div class="ai-disclaimer">
+        <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
+        <span>
+          Whatever mode you picked, the agent can make mistakes — a wrong estimate, a
+          misjudged assumption. Nothing reaches Jira until a human approves it (or, at
+          Autopilot, issues a token) — review every proposal before it's applied.
+        </span>
+      </div>
+
+      <div class="console-actions">
+        <button type="button" class="btn-secondary" data-back>&larr; Back</button>
+        <button type="submit" class="approve run-btn">Run</button>
+      </div>
+      <p class="edited-note">
+        This blocks until the agent finishes staging (or fails) &mdash; there is no progress bar yet.
+      </p>
+    </section>
+  </form>
+
+  <section class="console-panel card chat-card" id="step-3-chat" hidden>
+    <span class="step-title">{{ level_name("L1") }} chat</span>
+    <p class="chart-caption">
+      {{ level_tagline("L1") }}. Ask about issues, estimates, or status &mdash; nothing here can
+      stage or apply a change. This is both the run and the review for Advisor mode - there is
+      no separate proposal to approve.
+    </p>
+    <div class="ai-disclaimer">
+      <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
+      <span>The assistant can make mistakes. Verify anything important against Jira directly.</span>
+    </div>
+
+    {{ chat_thread_macro.chat_thread(chat_messages) }}
+
+    <form method="post" action="/chat" class="chat-form">
+      <textarea name="message" placeholder="Ask about your Jira project..." required></textarea>
+      <input type="hidden" name="redirect_to" value="/agent-console?level=L1">
+      <button type="submit" class="approve run-btn">Send</button>
     </form>
-  </div>
 
-  <p class="edited-note">
-    This blocks until the agent finishes staging (or fails) &mdash; there is no progress bar yet.
-    Picking {{ level_name("L1") }} and clicking Run goes straight to the chat instead &mdash; L1 has no
-    tool to drive this task type at all, so there is nothing here for it to run.
-  </p>
+    <div class="console-actions">
+      <button type="button" class="btn-secondary" data-back>&larr; Back</button>
+      <span></span>
+    </div>
+  </section>
 
   <script>
-    // L1 can't drive this task type - it has no start_run tool, structurally
-    // (see gateway/server.py's TOOLS_BY_LEVEL). Rather than let the form POST
-    // and fail with a 502 from the orchestrator, send the human straight to
-    // the surface L1 actually has. app/main.py's /agent-console/run route
-    // does the same check server-side, so this is progressive enhancement,
-    // not the only guard.
-    document.querySelector(".agent-console-form").addEventListener("submit", function (event) {
-      var level = document.getElementById("level-l1");
-      if (level && level.checked) {
-        event.preventDefault();
-        window.location.href = "/chat";
+    (function () {
+      var LEVEL_DETAILS = {
+        L1: {
+          may: "Read issues and chat about them.",
+          mayNot: "Write, propose, or apply anything - there is no tool for that, structurally.",
+        },
+        L2: {
+          may: "Read Jira, and propose changes you can edit before anything sends.",
+          mayNot: "Apply anything without your edit and explicit approval.",
+        },
+        L3: {
+          may: "Read Jira, and propose a finished, locked proposal for you to review.",
+          mayNot: "Apply anything itself - you approve, comment, or re-run it.",
+        },
+        L4: {
+          may: "Read, propose, and apply changes once you issue it a token.",
+          mayNot: "Apply anything without a token your browser explicitly issued.",
+        },
+      };
+      var SCOPE_LABELS = {
+        unestimated: "stories with no estimate yet",
+        all: "all stories in this project",
+        specific: "specific issue(s)",
+      };
+
+      var current = 1;
+
+      function selectedLevel() {
+        var checked = document.querySelector('input[name="level"]:checked');
+        return checked ? checked.value : null;
       }
-    });
+
+      function updateLevelDetail() {
+        var level = selectedLevel();
+        var detail = LEVEL_DETAILS[level];
+        if (!detail) return;
+        document.getElementById("level-detail-may-text").textContent = detail.may;
+        document.getElementById("level-detail-may-not-text").textContent = detail.mayNot;
+      }
+
+      function updateRunSummary() {
+        var scope = document.querySelector('input[name="scope"]:checked');
+        var scopeLabel = scope ? SCOPE_LABELS[scope.value] || scope.value : "";
+        var level = selectedLevel();
+        var levelLabel = level ? document.querySelector(".level-card-" + level + " .level-card-name").textContent : "";
+        document.getElementById("run-summary").textContent =
+          "Effort Estimation on " + scopeLabel + ", at " + levelLabel + " autonomy.";
+      }
+
+      function showStep(n) {
+        document.querySelectorAll(".console-panel").forEach(function (el) { el.hidden = true; });
+        var isChat = n === 3 && selectedLevel() === "L1";
+        var panelId = n === 3 ? (isChat ? "step-3-chat" : "step-3-run") : "step-" + n;
+        document.getElementById(panelId).hidden = false;
+
+        document.querySelectorAll(".stepper-item").forEach(function (el) {
+          var step = parseInt(el.dataset.step, 10);
+          el.classList.toggle("stepper-item-active", step === n);
+          el.classList.toggle("stepper-item-done", step < n);
+        });
+        document.getElementById("stepper-label-3").textContent = isChat ? "Chat" : "Run";
+
+        if (n === 3 && !isChat) updateRunSummary();
+        current = n;
+      }
+
+      document.querySelectorAll("[data-next]").forEach(function (btn) {
+        btn.addEventListener("click", function () { showStep(current + 1); });
+      });
+      document.querySelectorAll("[data-back]").forEach(function (btn) {
+        btn.addEventListener("click", function () { showStep(current - 1); });
+      });
+      document.querySelectorAll('input[name="level"]').forEach(function (radio) {
+        radio.addEventListener("change", updateLevelDetail);
+      });
+
+      updateLevelDetail();
+
+      // Returning from a chat send (POST /chat redirect_to=/agent-console?level=L1) -
+      // reopen straight on the chat step instead of resetting to step 1.
+      var params = new URLSearchParams(window.location.search);
+      showStep(params.get("level") === "L1" ? 3 : 1);
+    })();
   </script>
 {% endblock %}

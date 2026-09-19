@@ -10,6 +10,7 @@
     <h1>Run {{ run["id"][:8] }}</h1>
     <span class="status status-{{ run['status'] }}">{{ run["status"] }}</span>
   </div>
+  {% if status_note %}<p class="status-note">{{ status_note }}</p>{% endif %}
 
   <div class="card run-meta-card">
     <dl class="run-meta">
@@ -46,6 +47,13 @@
     {% if not rows %}
       <p class="empty">No staged changes on this run.</p>
     {% else %}
+      <div class="ai-disclaimer">
+        <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
+        <span>
+          These values and their reasoning were written by an AI agent and may be wrong.
+          Check them against what you actually know about the work before approving.
+        </span>
+      </div>
       {% if editable %}<form method="post" action="/runs/{{ run['id'] }}/approve" id="approve-form">{% endif %}
       <table>
         <thead>
@@ -112,9 +120,24 @@
       <div class="token-box">
         <p><strong>Token issued</strong> &mdash; hand this to the agent so it can call
           <code>commit_changes(run_id="{{ run['id'] }}", approval_token=&hellip;)</code>:</p>
-        <code class="token-value">{{ active_token["token"] }}</code>
+        <div class="token-value-row">
+          <code class="token-value" id="token-value">{{ active_token["token"] }}</code>
+          <button type="button" class="copy-btn" data-copy-target="token-value">Copy</button>
+        </div>
         <p class="edited-note">Expires {{ active_token["expires_at"] }}.</p>
       </div>
+      <script>
+        document.querySelectorAll("[data-copy-target]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var text = document.getElementById(btn.dataset.copyTarget).textContent;
+            navigator.clipboard.writeText(text).then(function () {
+              var original = btn.textContent;
+              btn.textContent = "Copied";
+              setTimeout(function () { btn.textContent = original; }, 1500);
+            });
+          });
+        });
+      </script>
     {% else %}
       <div class="actions card">
         <form method="post" action="/runs/{{ run['id'] }}/issue-token" class="inline-form">
@@ -145,5 +168,13 @@
         <button type="submit" class="reject">Send back</button>
       </form>
     </div>
+  {% endif %}
+
+  {% if run["status"] in ("applied", "rejected") %}
+    <p class="edited-note">
+      This run is done.
+      <a href="/agent-console">Start another run</a> &middot;
+      <a href="/dashboard">See it reflected on the dashboard</a>
+    </p>
   {% endif %}
 {% endblock %}

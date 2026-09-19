@@ -21,6 +21,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.analytics import STATUS_CATEGORY_LABELS, STATUS_CATEGORY_ORDER, build_dashboard_data
+from app.audit_display import friendly_action, friendly_actor, group_audit_rows, outcome_icon
+from app.charts import area_chart, bar_chart, donut_chart
 from app.chat_markdown import render_chat_markdown
 from app.levels import level_name, level_tagline
 from db.audit import log_audit
@@ -43,6 +46,29 @@ templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 templates.env.globals["level_name"] = level_name
 templates.env.globals["level_tagline"] = level_tagline
 templates.env.globals["render_chat_markdown"] = render_chat_markdown
+templates.env.globals["friendly_action"] = friendly_action
+templates.env.globals["friendly_actor"] = friendly_actor
+templates.env.globals["outcome_icon"] = outcome_icon
+
+_STYLE_CSS_PATH = APP_DIR / "static" / "style.css"
+
+
+def _static_version() -> int:
+    """Cache-buster for /static/style.css. StaticFiles sends no explicit
+    Cache-Control header, so browsers fall back to heuristic caching and
+    can keep serving a stale copy indefinitely even across a normal
+    reload - confirmed directly this session (a plain navigate, and even
+    a force-navigate, both kept serving an old cached stylesheet; only an
+    explicit cache:'no-store' fetch got the current one). Appending this
+    file's mtime to the stylesheet URL in base.html means the URL itself
+    changes the moment the file does, so a normal page load always gets
+    the current CSS - no server restart or manual cache-bust needed,
+    here or for anyone actually using the app.
+    """
+    return int(_STYLE_CSS_PATH.stat().st_mtime)
+
+
+templates.env.globals["static_version"] = _static_version
 
 _conn = get_connection()
 _conn.row_factory = sqlite3.Row
@@ -86,8 +112,28 @@ def list_runs(request: Request):
 
 
 @app.get("/agent-console")
-def agent_console(request: Request):
-    return templates.TemplateResponse(request, "agent_console.html", {})
+def agent_console(request: Request, scope: str = "unestimated", level: str = "L3"):
+    """`scope` pre-selects the "which issues?" radio - e.g. the dashboard's
+    "N stories not yet estimated" suggestion links straight to
+    ?scope=unestimated so a human doesn't have to make that choice by hand
+    after already being told what needs doing. `level` pre-selects the
+    working-mode step and, for L1, which panel the wizard opens on -
+    POST /chat's redirect_to sends a human back here with ?level=L1 after
+    sending a message, so the console reopens on the chat step instead of
+    resetting to step 1.
+
+    Always loads the L1 chat thread (not just when level=L1) so the
+    embedded chat step (see agent_console.html) has something to render
+    the moment a human switches to it, without a second request.
+    """
+    with _lock:
+        session_id = _get_or_create_chat_session()
+        messages = _conn.execute(
+            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id", (session_id,)
+        ).fetchall()
+    return templates.TemplateResponse(
+        request, "agent_console.html", {"default_scope": scope, "default_level": level, "chat_messages": messages}
+    )
 
 
 def _build_target_jql(scope: str, specific_issues: str) -> str:
@@ -123,12 +169,13 @@ async def agent_console_run(
 
     L1 can't drive this task type at all - it has no start_run tool
     (TOOLS_BY_LEVEL in gateway/server.py) - so it never reaches the
-    orchestrator here; the form's own JS already redirects to /chat before
-    this route is hit, this is the same check server-side for anyone who
-    posts here directly or has JS disabled.
+    orchestrator here; the wizard's own JS shows the embedded chat step
+    instead of submitting this form when L1 is selected (see
+    agent_console.html), this is the same guard server-side for anyone
+    who posts here directly or has JS disabled.
     """
     if level == "L1":
-        return RedirectResponse(url="/chat", status_code=303)
+        return RedirectResponse(url="/agent-console?level=L1", status_code=303)
     try:
         target_jql = _build_target_jql(scope, specific_issues)
     except ValueError as exc:
@@ -138,6 +185,31 @@ async def agent_console_run(
     except OrchestratorError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
+
+
+def _status_note(run: sqlite3.Row, active_token: sqlite3.Row | None) -> str:
+    """A short, plain-language line about what this run's status actually
+    means and what (if anything) happens next. The review flow - what's
+    reached Jira and what hasn't - is the part a first-time user gets lost
+    in, so say it explicitly rather than leaving the status pill alone to
+    carry that."""
+    status = run["status"]
+    if status == "running":
+        return "The agent is still working through this task - refresh in a moment."
+    if status == "rejected":
+        return "Sent back - nothing from this run reached Jira."
+    if status == "applied":
+        return "Applied to Jira. This record is now closed - see the audit log for exactly what changed."
+    if status == "awaiting_review":
+        if run["level"] != "L4":
+            return "Nothing has reached Jira yet - review what's below, then Approve or send it back."
+        if active_token is not None:
+            return "A token has been issued - Jira updates once the agent spends it, not before."
+        return (
+            "Nothing has reached Jira yet - acknowledge each change below, "
+            "then issue a token for the agent to spend."
+        )
+    return ""
 
 
 @app.get("/runs/{run_id}")
@@ -190,7 +262,13 @@ def show_run(request: Request, run_id: str):
     return templates.TemplateResponse(
         request,
         "run.html",
-        {"run": run, "rows": rows, "active_token": active_token, "all_acknowledged": all_acknowledged},
+        {
+            "run": run,
+            "rows": rows,
+            "active_token": active_token,
+            "all_acknowledged": all_acknowledged,
+            "status_note": _status_note(run, active_token),
+        },
     )
 
 
@@ -356,7 +434,48 @@ def reject_run(run_id: str, comment: str = Form(default="")):
 def show_audit(request: Request):
     with _lock:
         rows = _conn.execute("SELECT * FROM audit_log ORDER BY id DESC").fetchall()
-    return templates.TemplateResponse(request, "audit.html", {"rows": rows})
+    return templates.TemplateResponse(request, "audit.html", {"groups": group_audit_rows(rows)})
+
+
+_STATUS_CATEGORY_COLORS = ("var(--text-muted)", "var(--blue)", "var(--green)")
+
+
+@app.get("/dashboard")
+def show_dashboard(request: Request):
+    """Read-only analytics over the whole project - see app/analytics.py
+    for how the numbers and forecast are derived, app/charts.py for how
+    the SVGs are drawn. No caching: this is a small demo project, and a
+    stale dashboard is worse than one extra Jira round-trip per view.
+    """
+    jql = f"project = {_jira.config.project_key} ORDER BY created ASC"
+    rows = _jira.search_issues_for_analytics(jql)
+    data = build_dashboard_data(rows)
+
+    status_bars = [
+        {"label": STATUS_CATEGORY_LABELS[key], "value": data.status_counts[key], "color": color}
+        for key, color in zip(STATUS_CATEGORY_ORDER, _STATUS_CATEGORY_COLORS)
+    ]
+    estimate_segments = [
+        {"label": "Estimated", "value": data.estimated_count, "color": "var(--brand)"},
+        {"label": "Unestimated", "value": data.unestimated_count, "color": "var(--border)"},
+    ]
+    total_stories = data.estimated_count + data.unestimated_count
+    estimated_pct = round((data.estimated_count / total_stories) * 100) if total_stories else 0
+    burndown_points = [{"label": label, "value": value} for label, value in data.burndown]
+
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "data": data,
+            "status_bars": status_bars,
+            "estimate_segments": estimate_segments,
+            "estimated_pct": estimated_pct,
+            "status_chart": bar_chart(status_bars),
+            "estimate_chart": donut_chart(estimate_segments, center_label="estimated", center_value=f"{estimated_pct}%"),
+            "burndown_chart": area_chart(burndown_points),
+        },
+    )
 
 
 # ---------- L1 (Advisor) chat - read-only, see orchestrator/chat.py ----------
@@ -387,8 +506,19 @@ def show_chat(request: Request):
     return templates.TemplateResponse(request, "chat.html", {"messages": messages})
 
 
+_CHAT_REDIRECT_TARGETS = {"/chat", "/agent-console?level=L1"}
+
+
 @app.post("/chat")
-async def post_chat(message: str = Form(...)):
+async def post_chat(message: str = Form(...), redirect_to: str = Form(default="/chat")):
+    """`redirect_to` lets the embedded chat step in agent_console.html send
+    the human back to the console (reopening on the chat step - see
+    agent_console()'s docstring) instead of always landing on the
+    standalone /chat page. Restricted to a fixed allowlist rather than
+    trusted as-is - this is form input, not a hardcoded template value,
+    even though only our own templates currently set it."""
+    if redirect_to not in _CHAT_REDIRECT_TARGETS:
+        redirect_to = "/chat"
     with _lock:
         session_id = _get_or_create_chat_session()
         history = _conn.execute(
@@ -423,4 +553,4 @@ async def post_chat(message: str = Form(...)):
             outcome=outcome,
             detail=f"tool_calls={tool_calls}" if tool_calls else "no tool calls",
         )
-    return RedirectResponse(url="/chat", status_code=303)
+    return RedirectResponse(url=redirect_to, status_code=303)

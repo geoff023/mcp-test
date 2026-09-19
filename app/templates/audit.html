@@ -4,37 +4,53 @@
   <div class="page-head">
     <h1>Audit log</h1>
   </div>
+  <p class="page-subtitle">
+    Full provenance trail &mdash; every proposal, approval, refusal, and commit, with which
+    actor (human or agent) did it and at what autonomy level. Append-only: nothing here is
+    ever edited or deleted. Each run is grouped &mdash; expand one to see its individual steps.
+  </p>
 
-  <div class="card">
-    {% if not rows %}
+  <h2>Full history</h2>
+  <div class="card audit-card">
+    {% if not groups %}
       <p class="empty">Nothing logged yet.</p>
     {% else %}
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Run</th>
-            <th>Actor</th>
-            <th>Mode</th>
-            <th>Action</th>
-            <th>Outcome</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in rows %}
-            <tr>
-              <td class="muted">{{ row["ts"][:19].replace("T", " ") }}</td>
-              <td>{% if row["run_id"] %}<a href="/runs/{{ row['run_id'] }}">{{ row["run_id"][:8] }}</a>{% endif %}</td>
-              <td><code class="actor-code">{{ row["actor"] }}</code></td>
-              <td>{% if row["level"] %}<span class="level-pill level-{{ row['level'] }}">{{ level_name(row["level"]) }}</span>{% endif %}</td>
-              <td>{{ row["action"] }}</td>
-              <td><span class="outcome outcome-{{ row['outcome'] }}">{{ row["outcome"] }}</span></td>
-              <td class="detail-cell">{{ row["detail"] or "" }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {% for group in groups %}
+        {% set head = group.rows[0] %}
+        {% if group.run_id and group.rows|length > 1 %}
+          <details class="audit-group" {{ "open" if loop.index0 < 3 else "" }}>
+            <summary class="audit-summary">
+              <span class="audit-step-icon outcome-{{ head['outcome'] }}" aria-hidden="true">{{ outcome_icon(head["outcome"]) }}</span>
+              <span class="audit-summary-time muted">{{ head["ts"][:19].replace("T", " ") }}</span>
+              <a href="/runs/{{ group.run_id }}" class="audit-summary-run">{{ group.run_id[:8] }}</a>
+              {% if head["level"] %}<span class="level-pill level-{{ head['level'] }}">{{ level_name(head["level"]) }}</span>{% endif %}
+              <span class="audit-summary-headline">{{ friendly_action(head["action"]) }}</span>
+              <span class="audit-summary-count muted">{{ group.rows|length }} steps &darr;</span>
+            </summary>
+            <ul class="audit-steps">
+              {% for row in group.rows %}
+                <li>
+                  <span class="audit-step-icon outcome-{{ row['outcome'] }}" aria-hidden="true">{{ outcome_icon(row["outcome"]) }}</span>
+                  <span class="audit-step-time muted">{{ row["ts"][11:19] }}</span>
+                  <span class="audit-step-actor">{{ friendly_actor(row["actor"]) }}</span>
+                  <span class="audit-step-action">{{ friendly_action(row["action"]) }}</span>
+                  {% if row["detail"] %}<span class="audit-step-detail muted">{{ row["detail"] }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          </details>
+        {% else %}
+          <div class="audit-row-single">
+            <span class="audit-step-icon outcome-{{ head['outcome'] }}" aria-hidden="true">{{ outcome_icon(head["outcome"]) }}</span>
+            <span class="audit-step-time muted">{{ head["ts"][:19].replace("T", " ") }}</span>
+            {% if group.run_id %}<a href="/runs/{{ group.run_id }}" class="audit-summary-run">{{ group.run_id[:8] }}</a>{% endif %}
+            {% if head["level"] %}<span class="level-pill level-{{ head['level'] }}">{{ level_name(head["level"]) }}</span>{% endif %}
+            <span class="audit-step-actor">{{ friendly_actor(head["actor"]) }}</span>
+            <span class="audit-step-action">{{ friendly_action(head["action"]) }}</span>
+            {% if head["detail"] %}<span class="audit-step-detail muted">{{ head["detail"] }}</span>{% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
     {% endif %}
   </div>
 {% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Agentic PM{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Dashboard</h1>
+  </div>
+  <p class="page-subtitle">
+    A read-only snapshot of the whole project: where issues stand, how much estimated work is
+    left, and what might need your attention. Nothing on this page can change Jira.
+  </p>
+  <div class="ai-disclaimer">
+    <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
+    <span>
+      The forecast below is a simple pace-based estimate from recent history, not a
+      guarantee &mdash; a heads-up worth a look, not a promise.
+    </span>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <span class="stat-icon-badge stat-icon-badge-brand" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 5.5h12M4 10h12M4 14.5h8"/></svg>
+      </span>
+      <div class="stat-value">{{ data.total_issues }}</div>
+      <div class="stat-label">Total issues</div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon-badge stat-icon-badge-green" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.3"/><path d="M7 10.3l2 2 4-4.6"/></svg>
+      </span>
+      <div class="stat-value">{{ data.done_points|round(1) }} <span class="stat-value-of">/ {{ data.total_points|round(1) }}</span></div>
+      <div class="stat-label">Story points done</div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon-badge {{ 'stat-icon-badge-amber' if data.unestimated_count else 'stat-icon-badge-neutral' }}" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="10" r="7.3"/><path d="M7.7 8a2.3 2.3 0 114 1.6c-.7.5-1.2.9-1.2 1.9"/><circle cx="10.5" cy="14.2" r="0.35" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <div class="stat-value">{{ data.unestimated_count }}</div>
+      <div class="stat-label">Unestimated stories</div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon-badge {{ 'stat-icon-badge-red' if data.overdue else 'stat-icon-badge-neutral' }}" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.3"/><path d="M10 6v4.3l2.8 1.8"/></svg>
+      </span>
+      <div class="stat-value">{{ data.overdue|length }}</div>
+      <div class="stat-label">Overdue issues</div>
+    </div>
+  </div>
+
+  <h2>Where work stands</h2>
+  <div class="chart-grid">
+    <div class="card chart-card">
+      <h3 class="chart-title">Issues by status</h3>
+      {{ status_chart }}
+      <div class="chart-legend">
+        {% for b in status_bars %}
+          <span class="legend-item"><span class="legend-dot" style="background:{{ b.color }}"></span>{{ b.label }} ({{ b.value }})</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card chart-card">
+      <h3 class="chart-title">Estimation coverage</h3>
+      {{ estimate_chart }}
+      <div class="chart-legend">
+        {% for s in estimate_segments %}
+          <span class="legend-item"><span class="legend-dot" style="background:{{ s.color }}"></span>{{ s.label }} ({{ s.value }})</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <h2>Story points remaining over time</h2>
+  <div class="card chart-card chart-card-wide">
+    <p class="chart-caption">
+      Not a sprint burndown &mdash; this prototype has no sprint start/end dates (see
+      CLAUDE.md section 6). This tracks total remaining estimated points over the last 21
+      days, built from each story's actual Jira resolution date.
+    </p>
+    {{ burndown_chart }}
+  </div>
+
+  <h2>Forecast</h2>
+  <div class="card">
+    {% if data.velocity_per_day %}
+      <p>
+        At the current pace (~{{ "%.1f"|format(data.velocity_per_day) }} point(s)/day over
+        recent history), the remaining {{ "%.1f"|format(data.remaining_points) }} point(s)
+        would take about <strong>{{ "%.0f"|format(data.forecast_days) }} more day(s)</strong>
+        to finish.
+      </p>
+    {% else %}
+      <p class="empty">Not enough recently-completed stories yet to estimate a pace.</p>
+    {% endif %}
+  </div>
+
+  {% if data.overdue or data.upcoming_milestones %}
+    <h2>Needs attention</h2>
+    <div class="attention-grid">
+      {% if data.overdue %}
+        <div class="card">
+          <h3 class="chart-title">Overdue</h3>
+          <ul class="attention-list">
+            {% for item in data.overdue %}
+              <li>
+                <span>{{ item.key }} &mdash; {{ item.summary }}</span>
+                <span class="attention-tag attention-tag-overdue">{{ item.days_overdue }}d overdue</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if data.upcoming_milestones %}
+        <div class="card">
+          <h3 class="chart-title">Upcoming milestones</h3>
+          <ul class="attention-list">
+            {% for item in data.upcoming_milestones %}
+              <li>
+                <span>{{ item.key }} &mdash; {{ item.summary }}</span>
+                <span class="attention-tag attention-tag-milestone">due in {{ item.days_until }}d</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <h2>Suggestions &amp; things to watch</h2>
+  <div class="card">
+    <ul class="suggestion-list">
+      {% for s in data.suggestions %}
+        <li class="suggestion suggestion-{{ s.severity }}">
+          <span class="suggestion-icon" aria-hidden="true">{{ "⚠" if s.severity == "warning" else "ℹ" }}</span>
+          <span class="suggestion-text">
+            {{ s.text }}{% if s.action_url %}<a href="{{ s.action_url }}">{{ s.action_label }} &rarr;</a>{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endblock %}

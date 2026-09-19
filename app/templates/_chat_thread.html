@@ -1,0 +1,21 @@
+{# Shared L1 chat thread markup - used by chat.html (the standalone page)
+   and agent_console.html's embedded chat step, so the two never drift
+   apart into two slightly-different chat UIs. #}
+{% macro chat_thread(messages) %}
+  {% if not messages %}
+    <p class="empty">No messages yet. Try "which stories have no estimate?" or "what's the status of MCP-4?"</p>
+  {% else %}
+    <div class="chat-thread">
+      {% for m in messages %}
+        <div class="chat-msg chat-msg-{{ m['role'] }}">
+          <span class="chat-msg-role">{{ "You" if m["role"] == "user" else level_name("L1") }}</span>
+          {% if m["role"] == "agent" %}
+            <div class="chat-msg-body">{{ render_chat_markdown(m["content"]) }}</div>
+          {% else %}
+            <p>{{ m["content"] }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endmacro %}

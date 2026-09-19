@@ -197,6 +197,53 @@ class JiraClient:
         raw_issues = _normalize_list(payload)
         return [self._issue_from_raw(raw) for raw in raw_issues]
 
+    def search_issues_for_analytics(self, jql: str, max_results: int = 200) -> list[dict]:
+        """Raw per-issue rows for the dashboard (app/analytics.py): status
+        category (todo/in-progress/done), resolution date, and creation
+        date, on top of what search_issues() already reads. Kept separate
+        from search_issues()/Issue - that dataclass and _issue_summary()'s
+        dict shape in gateway/server.py are a fixed contract the MCP tool
+        payloads and their tests depend on; analytics needs extra fields
+        without touching it. maxResults defaults higher than
+        search_issues() - a dashboard should see the whole project, not a
+        50-issue page of it.
+        """
+        body = {
+            "jql": jql,
+            "maxResults": max_results,
+            "fields": [
+                "summary",
+                "status",
+                "issuetype",
+                "duedate",
+                "labels",
+                "resolutiondate",
+                "created",
+                self.config.story_points_field,
+            ],
+        }
+        payload = self._request("POST", f"/rest/api/{API_VERSION}/search/jql", json=body).json()
+        raw_issues = _normalize_list(payload)
+        rows = []
+        for raw in raw_issues:
+            fields = raw.get("fields", {})
+            status = fields.get("status") or {}
+            rows.append(
+                {
+                    "key": raw["key"],
+                    "summary": fields.get("summary", ""),
+                    "status": status.get("name", ""),
+                    "status_category": (status.get("statusCategory") or {}).get("key", "new"),
+                    "issue_type": (fields.get("issuetype") or {}).get("name", ""),
+                    "story_points": fields.get(self.config.story_points_field),
+                    "due_date": fields.get("duedate"),
+                    "resolved_at": fields.get("resolutiondate"),
+                    "created": fields.get("created"),
+                    "labels": fields.get("labels", []) or [],
+                }
+            )
+        return rows
+
     def get_issue(self, issue_key: str) -> Issue:
         raw = self._request(
             "GET",
