@@ -33,12 +33,30 @@
         <div class="step-body">
           <span class="step-title">What should the agent do?</span>
           <div class="chip-grid">
-            <span class="chip chip-selected">Effort Estimation</span>
-            <span class="chip chip-disabled">Weekly Status Report <em>Soon</em></span>
-            <span class="chip chip-disabled">Standup / Meeting Digest <em>Soon</em></span>
-            <span class="chip chip-disabled">Risk Scan / Report <em>Soon</em></span>
-            <span class="chip chip-disabled">Sprint Planning <em>Soon</em></span>
-            <span class="chip chip-disabled">Retrospective Synthesis <em>Soon</em></span>
+            <label class="chip">
+              <input type="radio" name="task_type_choice" value="reestimate" checked>
+              Effort Estimation
+            </label>
+            <label class="chip chip-disabled">
+              <input type="radio" name="task_type_choice" value="weekly_status" disabled>
+              Weekly Status Report <em>Soon</em>
+            </label>
+            <label class="chip chip-disabled">
+              <input type="radio" name="task_type_choice" value="standup_digest" disabled>
+              Standup / Meeting Digest <em>Soon</em>
+            </label>
+            <label class="chip chip-disabled">
+              <input type="radio" name="task_type_choice" value="risk_scan" disabled>
+              Risk Scan / Report <em>Soon</em>
+            </label>
+            <label class="chip chip-disabled">
+              <input type="radio" name="task_type_choice" value="sprint_planning" disabled>
+              Sprint Planning <em>Soon</em>
+            </label>
+            <label class="chip chip-disabled">
+              <input type="radio" name="task_type_choice" value="retrospective" disabled>
+              Retrospective Synthesis <em>Soon</em>
+            </label>
           </div>
         </div>
       </div>
@@ -90,6 +108,7 @@
             <span class="level-card-head">
               <input type="radio" name="level" value="{{ level }}" {{ "checked" if default_level == level else "" }}>
               <span class="level-card-name">{{ level_name(level) }}</span>
+              <span class="level-card-recommended" hidden>Recommended</span>
             </span>
             <span class="level-card-tagline">{{ level_tagline(level) }}</span>
           </label>
@@ -188,11 +207,39 @@
         specific: "specific issue(s)",
       };
 
+      // Fixed per-task-type recommendation, not computed or configurable -
+      // higher-risk/higher-blast-radius task types get a lower recommended
+      // autonomy level. reestimate: L2 matches the academic framework's own
+      // worked example for Human-AI Collaborative (see CLAUDE.md section 2).
+      // The rest are inert (their chips are disabled - see "Soon" above)
+      // but the mapping is filled in now so the recommendation is already
+      // correct the moment each task type actually ships.
+      var TASK_RECOMMENDATIONS = {
+        reestimate: "L2",
+        weekly_status: "L3",
+        standup_digest: "L3",
+        risk_scan: "L1",
+        sprint_planning: "L1",
+        retrospective: "L2",
+      };
+
       var current = 1;
 
       function selectedLevel() {
         var checked = document.querySelector('input[name="level"]:checked');
         return checked ? checked.value : null;
+      }
+
+      function selectedTaskType() {
+        var checked = document.querySelector('input[name="task_type_choice"]:checked');
+        return checked ? checked.value : "reestimate";
+      }
+
+      function updateRecommendedBadge() {
+        var recommended = TASK_RECOMMENDATIONS[selectedTaskType()];
+        document.querySelectorAll(".level-card-recommended").forEach(function (el) { el.hidden = true; });
+        var badge = recommended && document.querySelector(".level-card-" + recommended + " .level-card-recommended");
+        if (badge) badge.hidden = false;
       }
 
       function updateLevelDetail() {
@@ -238,12 +285,23 @@
       document.querySelectorAll('input[name="level"]').forEach(function (radio) {
         radio.addEventListener("change", updateLevelDetail);
       });
+      document.querySelectorAll('input[name="task_type_choice"]').forEach(function (radio) {
+        radio.addEventListener("change", updateRecommendedBadge);
+      });
 
+      var params = new URLSearchParams(window.location.search);
+      // No explicit ?level= (e.g. not a return from the chat step) - pre-select
+      // the recommended level for whichever task type is chosen, instead of
+      // the server's flat L3 default. An explicit ?level= always wins.
+      if (!params.get("level")) {
+        var recommendedRadio = document.querySelector('input[name="level"][value="' + TASK_RECOMMENDATIONS[selectedTaskType()] + '"]');
+        if (recommendedRadio) recommendedRadio.checked = true;
+      }
       updateLevelDetail();
+      updateRecommendedBadge();
 
       // Returning from a chat send (POST /chat redirect_to=/agent-console?level=L1) -
       // reopen straight on the chat step instead of resetting to step 1.
-      var params = new URLSearchParams(window.location.search);
       showStep(params.get("level") === "L1" ? 3 : 1);
     })();
   </script>
