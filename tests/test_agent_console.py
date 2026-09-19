@@ -55,20 +55,48 @@ def test_agent_console_run_creates_a_run_and_redirects(client, conn, monkeypatch
 
 
 def test_agent_console_run_surfaces_orchestrator_failure_as_502(client, monkeypatch):
+    """L1 used to be this test's example (it had no write tools, so the
+    orchestrator reliably raised OrchestratorError) - now L1 never reaches
+    the orchestrator at all (see the redirect test below), so this uses L2
+    with a stubbed failure instead to exercise the same 502 path for a
+    level that does reach run_reestimate_task."""
     test_client, _ = client
 
     async def failing_run_reestimate_task(*, level, target_jql, instructions):
-        raise OrchestratorError(f"Gemini never called start_run for this task at level={level!r}")
+        raise OrchestratorError(f"Gemini never called finish_run for this task at level={level!r}")
 
     monkeypatch.setattr(app_main, "run_reestimate_task", failing_run_reestimate_task)
 
     resp = test_client.post(
         "/agent-console/run",
-        data={"scope": "unestimated", "instructions": "", "level": "L1"},
+        data={"scope": "unestimated", "instructions": "", "level": "L2"},
     )
 
     assert resp.status_code == 502
-    assert "never called start_run" in resp.text
+    assert "never called finish_run" in resp.text
+
+
+def test_agent_console_run_redirects_l1_to_chat_without_calling_the_orchestrator(client, monkeypatch):
+    """L1 has no start_run tool - see TOOLS_BY_LEVEL in gateway/server.py -
+    so this route must never hand it to run_reestimate_task at all, not
+    even to let it fail with a 502. The form's own JS already redirects
+    before the POST happens; this is the same guard for anyone who posts
+    here directly."""
+    test_client, _ = client
+
+    async def unexpected_run_reestimate_task(*, level, target_jql, instructions):
+        raise AssertionError("run_reestimate_task must not be called for level=L1")
+
+    monkeypatch.setattr(app_main, "run_reestimate_task", unexpected_run_reestimate_task)
+
+    resp = test_client.post(
+        "/agent-console/run",
+        data={"scope": "unestimated", "instructions": "", "level": "L1"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/chat"
 
 
 def test_agent_console_run_rejects_empty_specific_issues(client):

@@ -19,7 +19,11 @@
         {% for m in messages %}
           <div class="chat-msg chat-msg-{{ m['role'] }}">
             <span class="chat-msg-role">{{ "You" if m["role"] == "user" else level_name("L1") }}</span>
-            <p>{{ m["content"] }}</p>
+            {% if m["role"] == "agent" %}
+              <div class="chat-msg-body">{{ render_chat_markdown(m["content"]) }}</div>
+            {% else %}
+              <p>{{ m["content"] }}</p>
+            {% endif %}
           </div>
         {% endfor %}
       </div>

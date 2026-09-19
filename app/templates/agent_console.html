@@ -43,6 +43,13 @@
       <fieldset class="scope-picker">
         <legend>Working mode</legend>
         <label class="radio-option mode-option">
+          <input type="radio" name="level" value="L1" id="level-l1">
+          <span class="mode-option-text">
+            <strong>{{ level_name("L1") }}</strong>
+            <span class="muted">{{ level_tagline("L1") }} &mdash; read-only chat, no proposal is staged</span>
+          </span>
+        </label>
+        <label class="radio-option mode-option">
           <input type="radio" name="level" value="L2">
           <span class="mode-option-text">
             <strong>{{ level_name("L2") }}</strong>
@@ -65,16 +72,29 @@
         </label>
       </fieldset>
 
-      <p class="edited-note">
-        Want to just ask questions about your Jira project instead of running a task? Try
-        <a href="/chat">{{ level_name("L1") }} chat</a> &mdash; read-only, no proposal is staged.
-      </p>
-
       <button type="submit" class="approve run-btn">Run</button>
     </form>
   </div>
 
   <p class="edited-note">
     This blocks until the agent finishes staging (or fails) &mdash; there is no progress bar yet.
+    Picking {{ level_name("L1") }} and clicking Run goes straight to the chat instead &mdash; L1 has no
+    tool to drive this task type at all, so there is nothing here for it to run.
   </p>
+
+  <script>
+    // L1 can't drive this task type - it has no start_run tool, structurally
+    // (see gateway/server.py's TOOLS_BY_LEVEL). Rather than let the form POST
+    // and fail with a 502 from the orchestrator, send the human straight to
+    // the surface L1 actually has. app/main.py's /agent-console/run route
+    // does the same check server-side, so this is progressive enhancement,
+    // not the only guard.
+    document.querySelector(".agent-console-form").addEventListener("submit", function (event) {
+      var level = document.getElementById("level-l1");
+      if (level && level.checked) {
+        event.preventDefault();
+        window.location.href = "/chat";
+      }
+    });
+  </script>
 {% endblock %}

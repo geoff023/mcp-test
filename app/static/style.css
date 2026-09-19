@@ -426,6 +426,16 @@ input[type="text"] {
 
 .chat-msg p { margin: 0.15rem 0 0; white-space: pre-wrap; }
 
+.chat-msg-body p { margin: 0.4rem 0 0; }
+.chat-msg-body p:first-child { margin-top: 0.15rem; }
+
+.chat-msg-body ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.25rem;
+}
+.chat-msg-body li { margin: 0.15rem 0; }
+.chat-msg-body strong { font-weight: 700; }
+
 .chat-msg-role {
   font-size: 0.72rem;
   font-weight: 700;

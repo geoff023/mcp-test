@@ -21,6 +21,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.chat_markdown import render_chat_markdown
 from app.levels import level_name, level_tagline
 from db.audit import log_audit
 from db.migrate import get_connection
@@ -41,6 +42,7 @@ app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="stati
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 templates.env.globals["level_name"] = level_name
 templates.env.globals["level_tagline"] = level_tagline
+templates.env.globals["render_chat_markdown"] = render_chat_markdown
 
 _conn = get_connection()
 _conn.row_factory = sqlite3.Row
@@ -118,7 +120,15 @@ async def agent_console_run(
     review surface once it reaches awaiting_review. Blocks for the
     duration of the LLM's tool-use loop - no background job queue, see
     docs/slice-3.md section 2 (explicitly out of scope for this slice).
+
+    L1 can't drive this task type at all - it has no start_run tool
+    (TOOLS_BY_LEVEL in gateway/server.py) - so it never reaches the
+    orchestrator here; the form's own JS already redirects to /chat before
+    this route is hit, this is the same check server-side for anyone who
+    posts here directly or has JS disabled.
     """
+    if level == "L1":
+        return RedirectResponse(url="/chat", status_code=303)
     try:
         target_jql = _build_target_jql(scope, specific_issues)
     except ValueError as exc:
