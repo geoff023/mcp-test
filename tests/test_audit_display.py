@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from app.audit_display import friendly_action, friendly_actor, group_audit_rows, outcome_icon
+from app.audit_display import friendly_action, friendly_actor, friendly_detail, group_audit_rows, outcome_icon
 
 
 def test_friendly_action_maps_known_codes():
@@ -95,3 +95,26 @@ def test_different_runs_stay_in_separate_groups():
     assert [g["run_id"] for g in groups] == ["run-2", "run-1"]
     assert len(groups[0]["rows"]) == 1
     assert len(groups[1]["rows"]) == 2
+
+
+def test_friendly_detail_drops_plumbing_the_reviewer_does_not_need():
+    assert friendly_detail("chat_turn", "tool_calls=[\"get_issue({'issue_key': 'MCP-3'})\"]") is None
+    assert friendly_detail("chat_turn", "no tool calls") is None
+    assert friendly_detail("start_run", "task_type=reestimate scope=key in (MCP-2)") is None
+    assert friendly_detail("issue_token", "token expires 2026-09-20; hand it to the agent to call commit_changes") is None
+    assert friendly_detail("start_run", None) is None
+
+
+def test_friendly_detail_rewrites_the_useful_details_in_plain_words():
+    assert friendly_detail("propose_estimate_change", "MCP-2 -> 1.0 pts") == "MCP-2 set to 1.0 points"
+    assert friendly_detail("finish_run", "1 staged changes") == "1 change staged"
+    assert friendly_detail("finish_run", "9 staged changes") == "9 changes staged"
+    assert friendly_detail("approve", "1 issue(s) applied: ['MCP-1']") == "Applied to MCP-1"
+    assert friendly_detail("commit_changes", "2 issue(s): ['MCP-1', 'MCP-4']") == "Applied to MCP-1, MCP-4"
+    assert friendly_detail("reject", "too high") == "Reason: too high"
+
+
+def test_friendly_detail_explains_a_guardrail_refusal_without_python_reprs():
+    detail = "refused due-date change on MCP-4: issue_type='Milestone', labels=['milestone']"
+    text = friendly_detail("propose_due_date_change", detail)
+    assert text == "MCP-4 is a milestone, so its due date can't be changed"

@@ -1,7 +1,7 @@
 """Server-rendered inline SVG charts for the dashboard - no charting
 library, no build step (CLAUDE.md section 4: plain CSS, no build step).
 Each function returns a Markup string of a small, self-contained <svg>.
-Colors are passed as CSS custom properties (e.g. "var(--blue)") and
+Colors are passed as CSS custom properties (e.g. "var(--viz-doing)") and
 resolve correctly because these charts render inline in the page's own
 DOM rather than as a separate image - the same :root tokens
 app/static/style.css defines for status/level pills apply here too, so a

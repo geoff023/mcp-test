@@ -19,7 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
-STATUS_CATEGORY_LABELS = {"new": "To Do", "indeterminate": "In Progress", "done": "Done"}
+STATUS_CATEGORY_LABELS = {"new": "To do", "indeterminate": "In progress", "done": "Done"}
 STATUS_CATEGORY_ORDER = ["new", "indeterminate", "done"]
 
 

@@ -22,7 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.analytics import STATUS_CATEGORY_LABELS, STATUS_CATEGORY_ORDER, build_dashboard_data
-from app.audit_display import friendly_action, friendly_actor, group_audit_rows, outcome_icon
+from app.run_display import clock_time, friendly_scope, full_datetime, humanize, short_date
+from app.audit_display import friendly_action, friendly_actor, friendly_detail, group_audit_rows, outcome_icon
 from app.charts import area_chart, bar_chart, donut_chart
 from app.chat_markdown import render_chat_markdown
 from app.levels import level_name, level_tagline
@@ -48,6 +49,9 @@ templates.env.globals["level_tagline"] = level_tagline
 templates.env.globals["render_chat_markdown"] = render_chat_markdown
 templates.env.globals["friendly_action"] = friendly_action
 templates.env.globals["friendly_actor"] = friendly_actor
+templates.env.globals["friendly_detail"] = friendly_detail
+for _fn in (clock_time, friendly_scope, full_datetime, humanize, short_date):
+    templates.env.globals[_fn.__name__] = _fn
 templates.env.globals["outcome_icon"] = outcome_icon
 
 _STYLE_CSS_PATH = APP_DIR / "static" / "style.css"
@@ -437,7 +441,7 @@ def show_audit(request: Request):
     return templates.TemplateResponse(request, "audit.html", {"groups": group_audit_rows(rows)})
 
 
-_STATUS_CATEGORY_COLORS = ("var(--text-muted)", "var(--blue)", "var(--green)")
+_STATUS_CATEGORY_COLORS = ("var(--viz-todo)", "var(--viz-doing)", "var(--viz-done)")
 
 
 @app.get("/dashboard")
@@ -478,7 +482,7 @@ def show_dashboard(request: Request):
     )
 
 
-# ---------- L1 (Advisor) chat - read-only, see orchestrator/chat.py ----------
+# ---------- L1 (Consultant) chat - read-only, see orchestrator/chat.py ----------
 
 CHAT_AGENT_IDENTITY = "agent:orchestrator:chat"
 

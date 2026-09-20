@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
-{% block title %}{{ level_name("L1") }} chat - Agentic PM{% endblock %}
+{% block title %}{{ level_name("L1") }} chat - Orbit{% endblock %}
 {% block content %}
   <div class="page-head">
     <h1>{{ level_name("L1") }} chat</h1>
     <span class="level-pill level-L1">{{ level_name("L1") }} <span class="level-code">(L1)</span></span>
   </div>
   <p class="page-subtitle">
-    {{ level_tagline("L1") }}. Ask about issues, estimates, or status &mdash; the assistant can only
+    {{ level_tagline("L1") }} Ask about issues, estimates, or status &mdash; the assistant can only
     read Jira, it structurally has no tool to change anything. Use the
     <a href="/agent-console">Agent console</a> to actually stage or apply a change.
   </p>

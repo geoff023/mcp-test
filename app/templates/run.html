@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Run {{ run["id"][:8] }} - Agentic PM{% endblock %}
+{% block title %}Run {{ run["id"][:8] }} - Orbit{% endblock %}
 {% block content %}
   {% set editable = run["level"] == "L2" and run["status"] == "awaiting_review" %}
   {% set ack_mode = run["level"] == "L4" and run["status"] == "awaiting_review" and not active_token %}
 
-  <p class="back-link"><a href="/">&larr; all runs</a></p>
+  <p class="back-link"><a href="/">All runs</a></p>
 
   <div class="page-head">
     <h1>Run {{ run["id"][:8] }}</h1>
-    <span class="status status-{{ run['status'] }}">{{ run["status"] }}</span>
+    <span class="status status-{{ run['status'] }}">{{ humanize(run["status"]) }}</span>
   </div>
   {% if status_note %}<p class="status-note">{{ status_note }}</p>{% endif %}
 
@@ -19,19 +19,19 @@
         <span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span>
         <span class="level-code">({{ run["level"] }})</span>
       </dd>
-      <dt>Task type</dt><dd>{{ run["task_type"] }}</dd>
-      <dt>Scope</dt><dd>{{ run["scope"] }}</dd>
-      <dt>Created</dt><dd class="muted">{{ run["created_at"][:19].replace("T", " ") }}</dd>
+      <dt>Task</dt><dd>{{ "Effort estimation" if run["task_type"] == "reestimate" else run["task_type"] }}</dd>
+      <dt>Scope</dt><dd><span title="{{ run['scope'] }}">{{ friendly_scope(run["scope"]) }}</span></dd>
+      <dt>Created</dt><dd class="muted"><time class="hover-tip" datetime="{{ run['created_at'] }}" title="{{ full_datetime(run['created_at']) }}">{{ short_date(run["created_at"]) }}</time></dd>
       {% if run["comment"] %}<dt>Comment</dt><dd>{{ run["comment"] }}</dd>{% endif %}
     </dl>
 
     {% if run["level"] == "L2" %}
       <p class="mode-note">
-        <strong>{{ level_name("L2") }} mode</strong> &mdash; {{ level_tagline("L2") }}. Edit any value below, then Approve.
+        <strong>{{ level_name("L2") }} mode</strong> &mdash; {{ level_tagline("L2") }} Edit any value below, then Approve.
       </p>
     {% elif run["level"] == "L3" %}
       <p class="mode-note">
-        <strong>{{ level_name("L3") }} mode</strong> &mdash; {{ level_tagline("L3") }}. The values below are locked.
+        <strong>{{ level_name("L3") }} mode</strong> &mdash; {{ level_tagline("L3") }} The values below are locked.
       </p>
     {% elif run["level"] == "L4" %}
       <p class="mode-note">
@@ -55,57 +55,56 @@
         </span>
       </div>
       {% if editable %}<form method="post" action="/runs/{{ run['id'] }}/approve" id="approve-form">{% endif %}
-      <table>
-        <thead>
-          <tr>
-            <th>Issue</th>
-            <th>Field</th>
-            <th>Old value</th>
-            <th>New value</th>
-            <th>Reasoning</th>
-            <th>Assumptions</th>
-            {% if ack_mode %}<th>Acknowledged</th>{% endif %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in rows %}
-            {% set change = row["change"] %}
-            <tr>
-              <td class="issue-cell">{{ change["issue_key"] }} <span class="muted">&mdash; {{ row["summary"] }}</span></td>
-              <td>{{ change["field"] }}</td>
-              <td>{{ row["old_value"] }}</td>
-              <td>
+      <ol class="change-list">
+        {% for row in rows %}
+          {% set change = row["change"] %}
+          <li class="change">
+            <div class="change-what">
+              <div class="change-head">
+                <span class="change-key">{{ change["issue_key"] }}</span>
+                <span class="change-summary">{{ row["summary"] }}</span>
+                <span class="change-field">{{ humanize(change["field"]) }}</span>
+              </div>
+              <div class="change-diff">
+                {% if row["old_value"] == "(none)" %}
+                  <span class="change-old-none"><span class="visually-hidden">Old value: </span>no value yet</span>
+                {% else %}
+                  <del class="change-old"><span class="visually-hidden">Old value: </span>{{ row["old_value"] }}</del>
+                {% endif %}
+                <span class="change-to" aria-hidden="true">&rarr;</span>
                 {% if editable %}
-                  <input type="text" name="value_{{ change['id'] }}"
+                  <input type="text" name="value_{{ change['id'] }}" aria-label="New value for {{ change['issue_key'] }}"
                          value="{{ change['edited_value'] or change['new_value'] }}">
                 {% elif change["edited_value"] %}
-                  <strong>{{ change["edited_value"] }}</strong>
+                  <ins class="change-new"><span class="visually-hidden">New value: </span>{{ change["edited_value"] }}</ins>
                   <span class="edited-note">(edited from {{ change["new_value"] }})</span>
                 {% else %}
-                  <strong>{{ change["new_value"] }}</strong>
+                  <ins class="change-new"><span class="visually-hidden">New value: </span>{{ change["new_value"] }}</ins>
                 {% endif %}
-              </td>
-              <td class="reasoning-cell">{{ change["reasoning"] }}</td>
-              <td class="assumptions-cell">
+              </div>
+            </div>
+            <dl class="change-why">
+              <dt>Reasoning</dt>
+              <dd>{{ change["reasoning"] }}</dd>
+              <dt>Assumptions</dt>
+              <dd>
                 {% if change["assumptions"] and change["assumptions"] != "NA" %}
                   {{ change["assumptions"] }}
                 {% else %}
-                  <span class="muted">NA</span>
+                  <span class="muted">None stated</span>
                 {% endif %}
-              </td>
-              {% if ack_mode %}
-                <td>
-                  <form method="post" action="/runs/{{ run['id'] }}/changes/{{ change['id'] }}/acknowledge" class="ack-form">
-                    <button type="submit" class="ack-btn {{ 'is-acknowledged' if change['acknowledged'] }}">
-                      {{ "✓ Acknowledged" if change["acknowledged"] else "Acknowledge" }}
-                    </button>
-                  </form>
-                </td>
-              {% endif %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+              </dd>
+            </dl>
+            {% if ack_mode %}
+              <form method="post" action="/runs/{{ run['id'] }}/changes/{{ change['id'] }}/acknowledge" class="ack-form">
+                <button type="submit" class="ack-btn {{ 'is-acknowledged' if change['acknowledged'] }}">
+                  {{ "✓ Acknowledged" if change["acknowledged"] else "Acknowledge" }}
+                </button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
       {% if editable %}
         <div class="actions">
           <button type="submit" class="approve">Approve</button>

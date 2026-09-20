@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
-{% block title %}Agent console - Agentic PM{% endblock %}
+{% block title %}Agent console - Orbit{% endblock %}
 {% block content %}
   <div class="page-head">
     <h1>Agent console</h1>
   </div>
   <p class="page-subtitle">
     Defines and runs a task through Gemini instead of a human typing a prompt into Claude
-    Code. One task type for now &mdash; the rest are future work.
+    Code.
   </p>
 
   <nav class="stepper" aria-label="Progress">
@@ -29,40 +29,38 @@
 
     <section class="console-panel card" id="step-1">
       <div class="console-step">
-        <span class="step-number" aria-hidden="true">1</span>
         <div class="step-body">
           <span class="step-title">What should the agent do?</span>
           <div class="chip-grid">
             <label class="chip">
               <input type="radio" name="task_type_choice" value="reestimate" checked>
-              Effort Estimation
+              Effort estimation
             </label>
             <label class="chip chip-disabled">
               <input type="radio" name="task_type_choice" value="weekly_status" disabled>
-              Weekly Status Report <em>Soon</em>
+              Weekly status report <em>Soon</em>
             </label>
             <label class="chip chip-disabled">
               <input type="radio" name="task_type_choice" value="standup_digest" disabled>
-              Standup / Meeting Digest <em>Soon</em>
+              Standup / meeting digest <em>Soon</em>
             </label>
             <label class="chip chip-disabled">
               <input type="radio" name="task_type_choice" value="risk_scan" disabled>
-              Risk Scan / Report <em>Soon</em>
+              Risk scan / report <em>Soon</em>
             </label>
             <label class="chip chip-disabled">
               <input type="radio" name="task_type_choice" value="sprint_planning" disabled>
-              Sprint Planning <em>Soon</em>
+              Sprint planning <em>Soon</em>
             </label>
             <label class="chip chip-disabled">
               <input type="radio" name="task_type_choice" value="retrospective" disabled>
-              Retrospective Synthesis <em>Soon</em>
+              Retrospective synthesis <em>Soon</em>
             </label>
           </div>
         </div>
       </div>
 
       <div class="console-step">
-        <span class="step-number" aria-hidden="true">2</span>
         <div class="step-body">
           <fieldset class="scope-picker">
             <legend>Which issues?</legend>
@@ -84,7 +82,6 @@
       </div>
 
       <div class="console-step">
-        <span class="step-number" aria-hidden="true">3</span>
         <div class="step-body">
           <label class="step-title" for="instructions">
             Anything else the agent should know?
@@ -96,7 +93,7 @@
 
       <div class="console-actions">
         <span></span>
-        <button type="button" class="btn-primary" data-next>Next: Working mode &rarr;</button>
+        <button type="button" class="btn-primary" data-next>Next: working mode</button>
       </div>
     </section>
 
@@ -127,8 +124,8 @@
       </div>
 
       <div class="console-actions">
-        <button type="button" class="btn-secondary" data-back>&larr; Back</button>
-        <button type="button" class="btn-primary" data-next id="step-2-next">Next &rarr;</button>
+        <button type="button" class="btn-secondary" data-back>Back</button>
+        <button type="button" class="btn-primary" data-next id="step-2-next">Next</button>
       </div>
     </section>
 
@@ -141,12 +138,12 @@
         <span>
           Whatever mode you picked, the agent can make mistakes — a wrong estimate, a
           misjudged assumption. Nothing reaches Jira until a human approves it (or, at
-          Autopilot, issues a token) — review every proposal before it's applied.
+          Super-Pilot, issues a token) — review every proposal before it's applied.
         </span>
       </div>
 
       <div class="console-actions">
-        <button type="button" class="btn-secondary" data-back>&larr; Back</button>
+        <button type="button" class="btn-secondary" data-back>Back</button>
         <button type="submit" class="approve run-btn">Run</button>
       </div>
       <p class="edited-note">
@@ -158,8 +155,8 @@
   <section class="console-panel card chat-card" id="step-3-chat" hidden>
     <span class="step-title">{{ level_name("L1") }} chat</span>
     <p class="chart-caption">
-      {{ level_tagline("L1") }}. Ask about issues, estimates, or status &mdash; nothing here can
-      stage or apply a change. This is both the run and the review for Advisor mode - there is
+      {{ level_tagline("L1") }} Ask about issues, estimates, or status &mdash; nothing here can
+      stage or apply a change. This is both the run and the review for Consultant mode - there is
       no separate proposal to approve.
     </p>
     <div class="ai-disclaimer">
@@ -176,7 +173,7 @@
     </form>
 
     <div class="console-actions">
-      <button type="button" class="btn-secondary" data-back>&larr; Back</button>
+      <button type="button" class="btn-secondary" data-back>Back</button>
       <span></span>
     </div>
   </section>
@@ -256,7 +253,7 @@
         var level = selectedLevel();
         var levelLabel = level ? document.querySelector(".level-card-" + level + " .level-card-name").textContent : "";
         document.getElementById("run-summary").textContent =
-          "Effort Estimation on " + scopeLabel + ", at " + levelLabel + " autonomy.";
+          "Effort estimation on " + scopeLabel + ", at " + levelLabel + " autonomy.";
       }
 
       function showStep(n) {

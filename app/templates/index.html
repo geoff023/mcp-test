@@ -1,46 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Runs - Agentic PM{% endblock %}
+{% block title %}Runs - Orbit{% endblock %}
 {% block content %}
   <div class="page-head">
     <h1>Runs</h1>
     {% if awaiting_review_count %}
       <span class="awaiting-review-badge">{{ awaiting_review_count }} awaiting review</span>
     {% endif %}
+    <a href="/agent-console" class="button-link">New run</a>
   </div>
-  <p class="page-subtitle">
-    Every task an agent has run, and what happened to it. Nothing here has touched Jira until
-    a run's status says <strong>applied</strong>.
-  </p>
+  <p class="page-subtitle">Nothing reaches Jira until a run is applied.</p>
 
-  <h2>All runs</h2>
   <div class="card">
     {% if not runs %}
-      <p class="empty">
-        No runs yet. Ask the agent to do something from the <a href="/agent-console">Agent
-        console</a>, or ask a question first in <a href="/chat">Chat</a> &mdash; anything it
-        proposes will show up here for you to review.
-      </p>
+      <p class="empty">No runs yet. Start one from the <a href="/agent-console">Agent console</a>.</p>
     {% else %}
-      <table>
+      {# The task column only earns its space once there is more than one kind of task. #}
+      {% set show_task = runs|map(attribute="task_type")|unique|list|length > 1 %}
+      <table class="runs-table">
         <thead>
           <tr>
             <th>Created</th>
             <th>Mode</th>
-            <th>Task type</th>
+            {% if show_task %}<th>Task</th>{% endif %}
             <th>Scope</th>
             <th>Status</th>
-            <th></th>
+            <th class="col-action"><span class="visually-hidden">Open</span></th>
           </tr>
         </thead>
         <tbody>
           {% for run in runs %}
             <tr>
-              <td class="muted">{{ run["created_at"][:19].replace("T", " ") }}</td>
+              <td class="muted"><time class="hover-tip" datetime="{{ run['created_at'] }}" title="{{ full_datetime(run['created_at']) }}">{{ short_date(run["created_at"]) }}</time></td>
               <td><span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span></td>
-              <td>{{ run["task_type"] }}</td>
-              <td class="scope-cell">{{ run["scope"] }}</td>
-              <td><span class="status status-{{ run['status'] }}">{{ run["status"] }}</span></td>
-              <td><a class="review-link" href="/runs/{{ run['id'] }}">Review &rarr;</a></td>
+              {% if show_task %}<td class="task-cell">{{ "Effort estimation" if run["task_type"] == "reestimate" else run["task_type"] }}</td>{% endif %}
+              <td class="scope-cell"><span title="{{ run['scope'] }}">{{ friendly_scope(run["scope"]) }}</span></td>
+              <td><span class="status status-{{ run['status'] }}">{{ humanize(run["status"]) }}</span></td>
+              <td class="col-action">
+                <a class="icon-link" href="/runs/{{ run['id'] }}" aria-label="Review run {{ run['id'][:8] }}" title="Review">
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M1.8 10S4.7 4.8 10 4.8 18.2 10 18.2 10 15.3 15.2 10 15.2 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.5"/></svg>
+                </a>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

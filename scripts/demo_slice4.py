@@ -3,7 +3,7 @@
 1. The assumptions field: runs a real reestimate task (same path as
    demo_slice3.py) and shows the agent's assumptions alongside its
    reasoning for each staged proposal - no numeric confidence anymore.
-2. The L1 (Advisor) chat surface: asks the real Gemini-backed chat agent a
+2. The L1 (Consultant) chat surface: asks the real Gemini-backed chat agent a
    read-only question, prints the tool calls it made and its answer, then
    re-reads the same issues from Jira to prove nothing changed - the
    before/after story a write-capable level would show is, for a read-only
@@ -74,7 +74,7 @@ def main() -> int:
         print(f"\n   Review this run at http://localhost:8000/runs/{run_id}")
 
     print("\n" + "=" * 72)
-    print("SLICE 4 DEMO, PART 2 - L1 (Advisor) chat")
+    print("SLICE 4 DEMO, PART 2 - L1 (Consultant) chat")
     print("=" * 72)
     with client:
         _print_points(client, issue_keys, "3. State in Jira BEFORE the chat turn:")

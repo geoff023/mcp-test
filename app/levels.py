@@ -7,27 +7,28 @@ runs.level, every test. CLAUDE.md's own names for these levels
 Guided AI-Autonomy/Approver) come directly from Assalaarachchi et al.'s
 four working modes and stay the authoritative, citable names for the
 report - these are friendlier labels for the product UI, shown alongside
-the level code, not a replacement of the academic ones.
+the level code, not a replacement of the academic ones. (Note the overlap:
+"Consultant" is this product's name for L1 but the academic name for L3.)
 """
 
 from __future__ import annotations
 
 LEVEL_DISPLAY: dict[str, dict[str, str]] = {
     "L1": {
-        "name": "Advisor",
-        "tagline": "Reads and suggests - you do everything yourself",
+        "name": "Consultant",
+        "tagline": "AI advises. You decide.",
     },
     "L2": {
-        "name": "Co-Pilot",
-        "tagline": "Drafts proposals - you can edit before anything is sent",
+        "name": "Co-worker",
+        "tagline": "AI creates. You refine.",
     },
     "L3": {
-        "name": "Analyst",
-        "tagline": "Prepares a finished proposal - you approve it or send it back",
+        "name": "Committer",
+        "tagline": "AI completes. You approve.",
     },
     "L4": {
-        "name": "Autopilot",
-        "tagline": "Applies changes itself, once you authorise it",
+        "name": "Super-Pilot",
+        "tagline": "AI executes. You authorise.",
     },
 }
 

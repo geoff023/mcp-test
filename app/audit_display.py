@@ -9,6 +9,7 @@ renders it.
 from __future__ import annotations
 
 import itertools
+import re
 import sqlite3
 
 _ACTION_LABELS = {
@@ -51,6 +52,38 @@ def friendly_actor(actor: str) -> str:
     if actor.startswith("agent:orchestrator:"):
         return f"AI agent ({actor.split(':', 2)[2]})"
     return actor
+
+
+_ISSUE_KEY = re.compile(r"[A-Z][A-Z0-9]+-\d+")
+
+
+def friendly_detail(action: str, detail: str | None) -> str | None:
+    """A short plain-language line for an audit row, or None when the raw
+    detail is only plumbing (tool-call dumps, task_type=... scope=<JQL>,
+    "call commit_changes"). Presentation only - the stored detail is never
+    touched. Unknown formats fall through as-is only for the two actions
+    whose detail is human text (a reviewer's comment, a refusal reason)."""
+    if not detail:
+        return None
+    if action in ("chat_turn", "start_run", "issue_token"):
+        return None
+    if action == "propose_estimate_change":
+        m = re.match(r"(\S+) -> ([\d.]+) pts$", detail)
+        return f"{m[1]} set to {m[2]} points" if m else None
+    if action == "propose_due_date_change":
+        m = re.match(r"refused due-date change on (\S+):", detail)
+        if m:
+            return f"{m[1]} is a milestone, so its due date can't be changed"
+        return detail.replace(" -> ", " to ")
+    if action == "finish_run":
+        m = re.match(r"(\d+) staged changes?$", detail)
+        return f"{m[1]} {'change' if m[1] == '1' else 'changes'} staged" if m else None
+    if action in ("approve", "commit_changes") and "issue(s)" in detail:
+        keys = _ISSUE_KEY.findall(detail)
+        return f"Applied to {', '.join(keys)}" if keys else None
+    if action == "reject":
+        return f"Reason: {detail}"
+    return detail
 
 
 def outcome_icon(outcome: str) -> str:
