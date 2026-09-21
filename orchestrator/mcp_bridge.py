@@ -9,12 +9,31 @@ two files.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+from typing import Callable
 
 from google.genai import types as genai_types
 from mcp import types as mcp_types
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+StepCallback = Callable[[dict], None]
+
+
+def emit_step(on_step: StepCallback | None, **event: object) -> None:
+    """Tell a listener what the loop is doing right now, so a UI can show it
+    live. Events are {"phase": "model" | "tool", "state": "start" | "end", ...};
+    tool events also carry the tool name, its args (start) and its result (end).
+    Best-effort by design: a broken listener must never break the run itself.
+    """
+    if on_step is None:
+        return
+    try:
+        on_step(event)
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        print(f"progress listener failed: {exc!r}", file=sys.stderr)
 
 
 def model_id() -> str:

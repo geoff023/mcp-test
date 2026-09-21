@@ -145,6 +145,9 @@ app/                Control plane: FastAPI + Jinja2, server-rendered. No SPA fra
   charts.py            Inline-SVG chart builders (bar/donut/area) — no charting library, no build step.
   audit_display.py     friendly_action()/friendly_actor()/group_audit_rows() for the audit log.
   chat_markdown.py     Narrow markdown->HTML renderer for chat replies (bold + bullets only).
+  jobs.py              In-memory background jobs with live progress: runs an orchestrator/chat loop after the
+                        request returns, records the real tool calls it makes as plain-language steps; the page
+                        polls GET /jobs/{id} (static/progress.js draws them). No queue, no DB - a one-user prototype.
   templates/           base, index (Runs), agent_console (wizard), chat, dashboard, audit, run,
                         _chat_thread (shared chat-history macro).
   static/style.css     One stylesheet, cache-busted by app.main._static_version() (the file's

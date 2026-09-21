@@ -99,3 +99,27 @@ async def test_chat_turn_raises_when_the_model_never_gives_a_final_answer(conn, 
         await run_chat_turn(
             history=[], message="Anything", gemini=_fake_gemini(_NeverAnswersModels()), mcp_server=server
         )
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_reports_its_read_steps_then_waits_on_the_model_for_the_answer(conn, jira_with_spy):
+    jira, spy = jira_with_spy
+    spy.request.return_value.raise_for_status.return_value = None
+    spy.request.return_value.json.return_value = {"issues": []}
+    server = build_server("L1", jira=jira, conn=conn)
+    events: list[dict] = []
+
+    await run_chat_turn(
+        history=[], message="Which stories have no estimate?", gemini=_fake_gemini(_FakeModels()),
+        mcp_server=server, on_step=events.append,
+    )
+
+    assert [(e["tool"], e["state"]) for e in events if e["phase"] == "tool"] == [
+        ("search_issues", "start"), ("search_issues", "end"),
+    ]
+    # model, tool, model: the last thing that happens is the model writing the answer
+    assert [(e["phase"], e["state"]) for e in events] == [
+        ("model", "start"), ("model", "end"),
+        ("tool", "start"), ("tool", "end"),
+        ("model", "start"), ("model", "end"),
+    ]

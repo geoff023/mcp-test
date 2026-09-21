@@ -21,6 +21,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app import jobs
 from app.analytics import STATUS_CATEGORY_LABELS, STATUS_CATEGORY_ORDER, build_dashboard_data
 from app.run_display import clock_time, friendly_scope, full_datetime, humanize, short_date
 from app.audit_display import friendly_action, friendly_actor, friendly_detail, group_audit_rows, outcome_icon
@@ -73,6 +74,14 @@ def _static_version() -> int:
 
 
 templates.env.globals["static_version"] = _static_version
+
+
+def _script_version() -> int:
+    """Same cache-busting idea as _static_version, for static/*.js."""
+    return int(max(p.stat().st_mtime for p in (APP_DIR / "static").glob("*.js")))
+
+
+templates.env.globals["script_version"] = _script_version
 
 _conn = get_connection()
 _conn.row_factory = sqlite3.Row
@@ -189,6 +198,41 @@ async def agent_console_run(
     except OrchestratorError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
+
+
+@app.post("/agent-console/start")
+async def agent_console_start(
+    scope: str = Form(...),
+    specific_issues: str = Form(default=""),
+    instructions: str = Form(default=""),
+    level: str = Form(...),
+):
+    """Same task as /agent-console/run, but the orchestrator keeps going in the
+    background and this returns at once with a job id; the console page polls
+    GET /jobs/{id} to show each real step and goes to the run's review page
+    when it finishes. /agent-console/run stays as the no-JavaScript path."""
+    if level == "L1":
+        raise HTTPException(status_code=400, detail="Consultant mode has no run to start - use the chat.")
+    try:
+        target_jql = _build_target_jql(scope, specific_issues)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    async def work(job: jobs.Job) -> str:
+        run_id = await run_reestimate_task(
+            level=level, target_jql=target_jql, instructions=instructions, on_step=job.on_step
+        )
+        return f"/runs/{run_id}"
+
+    return {"job_id": jobs.start("run", work).id}
+
+
+@app.get("/jobs/{job_id}")
+def job_status(job_id: str):
+    job = jobs.JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown job - the server may have restarted. Try again.")
+    return job.to_json()
 
 
 def _status_note(run: sqlite3.Row, active_token: sqlite3.Row | None) -> str:
@@ -513,31 +557,16 @@ def show_chat(request: Request):
 _CHAT_REDIRECT_TARGETS = {"/chat", "/agent-console?level=L1"}
 
 
-@app.post("/chat")
-async def post_chat(message: str = Form(...), redirect_to: str = Form(default="/chat")):
-    """`redirect_to` lets the embedded chat step in agent_console.html send
-    the human back to the console (reopening on the chat step - see
-    agent_console()'s docstring) instead of always landing on the
-    standalone /chat page. Restricted to a fixed allowlist rather than
-    trusted as-is - this is form input, not a hardcoded template value,
-    even though only our own templates currently set it."""
-    if redirect_to not in _CHAT_REDIRECT_TARGETS:
-        redirect_to = "/chat"
+def _load_chat_history() -> tuple[str, list[dict]]:
     with _lock:
         session_id = _get_or_create_chat_session()
         history = _conn.execute(
             "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id", (session_id,)
         ).fetchall()
-    history_dicts = [{"role": row["role"], "content": row["content"]} for row in history]
+    return session_id, [{"role": row["role"], "content": row["content"]} for row in history]
 
-    try:
-        answer, tool_calls = await run_chat_turn(history=history_dicts, message=message)
-        outcome = "answered"
-    except ChatError as exc:
-        answer = f"Sorry, I couldn't answer that: {exc}"
-        tool_calls = []
-        outcome = "failed"
 
+def _record_chat_turn(session_id: str, message: str, answer: str, tool_calls: list[str], outcome: str) -> None:
     with _lock:
         _conn.execute(
             "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'user', ?, ?)",
@@ -557,4 +586,48 @@ async def post_chat(message: str = Form(...), redirect_to: str = Form(default="/
             outcome=outcome,
             detail=f"tool_calls={tool_calls}" if tool_calls else "no tool calls",
         )
+
+
+@app.post("/chat")
+async def post_chat(message: str = Form(...), redirect_to: str = Form(default="/chat")):
+    """`redirect_to` lets the embedded chat step in agent_console.html send
+    the human back to the console (reopening on the chat step - see
+    agent_console()'s docstring) instead of always landing on the
+    standalone /chat page. Restricted to a fixed allowlist rather than
+    trusted as-is - this is form input, not a hardcoded template value,
+    even though only our own templates currently set it. This is the
+    no-JavaScript path; with JavaScript the page uses /chat/start."""
+    if redirect_to not in _CHAT_REDIRECT_TARGETS:
+        redirect_to = "/chat"
+    session_id, history = _load_chat_history()
+
+    try:
+        answer, tool_calls = await run_chat_turn(history=history, message=message)
+        outcome = "answered"
+    except ChatError as exc:
+        answer = f"Sorry, I couldn't answer that: {exc}"
+        tool_calls = []
+        outcome = "failed"
+
+    _record_chat_turn(session_id, message, answer, tool_calls, outcome)
     return RedirectResponse(url=redirect_to, status_code=303)
+
+
+@app.post("/chat/start")
+async def post_chat_start(message: str = Form(...)):
+    """Background variant of POST /chat: the turn runs while the page shows
+    the assistant's real steps (GET /jobs/{id}); the page then reloads to
+    show the saved thread, exactly as after the blocking route."""
+    session_id, history = _load_chat_history()
+
+    async def work(job: jobs.Job) -> None:
+        try:
+            answer, tool_calls = await run_chat_turn(history=history, message=message, on_step=job.on_step)
+            outcome = "answered"
+        except ChatError as exc:
+            answer = f"Sorry, I couldn't answer that: {exc}"
+            tool_calls = []
+            outcome = "failed"
+        _record_chat_turn(session_id, message, answer, tool_calls, outcome)
+
+    return {"job_id": jobs.start("chat", work).id}

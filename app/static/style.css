@@ -479,28 +479,34 @@ input[type="text"] {
 
 /* ---------- staged changes (redlines) ---------- */
 
+/* Each change: who it is about, then one label column (the field, Reasoning,
+   Assumptions) with the values aligned beside it. The decision bar closes the card. */
+
 .change-list { list-style: none; margin: 0; padding: 0; }
 
-.change {
-  display: grid;
-  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
-  gap: 0.75rem 2.5rem;
-  padding: 1.4rem 0;
-  border-bottom: 1px solid var(--border);
-}
+.change { padding: 1.5rem 0; border-bottom: 1px solid var(--border); }
+.change:first-child { padding-top: 0.25rem; }
 .change:last-child { border-bottom: none; padding-bottom: 0.25rem; }
 
-.change-head { display: flex; flex-direction: column; gap: 0.1rem; }
-.change-key { font-family: var(--mono); font-weight: 600; font-size: var(--text-base); }
-.change-summary { color: var(--text-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
-.change-field { font-size: var(--text-sm); color: var(--text-muted); margin-top: 0.15rem; }
+.change-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.15rem 0.75rem; margin-bottom: 1rem; }
+.change-key { font-family: var(--mono); font-weight: 600; font-size: var(--text-lg); }
+.change-summary { color: var(--text-muted); overflow-wrap: anywhere; }
+
+.change-body {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.9rem 1.5rem;
+  align-items: baseline;
+  margin: 0;
+}
+.change-body dt { font-weight: 600; font-size: var(--text-sm); color: var(--text-muted); }
+.change-body dd { margin: 0; max-width: 75ch; }
 
 .change-diff {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.4rem 0.75rem;
-  margin-top: 0.6rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -522,17 +528,20 @@ input[type="text"] {
 }
 .change-diff input[type="text"] { width: 5.5rem; font-size: var(--text-lg); font-weight: 700; padding: 0.25rem 0.5rem; }
 
-.change-why {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.35rem 1.25rem;
-  margin: 0;
-  align-content: start;
-}
-.change-why dt { font-weight: 600; font-size: var(--text-sm); color: var(--text-muted); padding-top: 0.1rem; }
-.change-why dd { margin: 0; max-width: 75ch; }
+.change .ack-form { margin: 1rem 0 0 calc(8rem + 1.5rem); }
 
-.change .ack-form { grid-column: 2; }
+/* the decision bar: the one primary action on the left, send-back on the right */
+.decision {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.decision-primary .inline-form { align-items: center; }
 
 /* ---------- agent console ---------- */
 
@@ -927,6 +936,84 @@ input[type="text"] {
 }
 details[open] > .audit-summary .audit-count::after { transform: translateY(0.05em) rotate(-135deg); }
 
+/* ---------- live progress (agent run / chat turn) ---------- */
+
+/* One row per real step the agent took. The row it is on right now is at full
+   strength; finished rows recede. Same look on the console and in chat. */
+
+.progress { margin: 1rem 0 0.25rem; }
+.progress-steps { list-style: none; margin: 0; padding: 0; }
+
+.progress-step, .progress-thinking {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.4rem 0;
+}
+.progress-thinking { color: var(--text-muted); }
+.progress-thinking[hidden] { display: none; }
+
+.progress-icon {
+  flex: none;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  border: 2px solid var(--control);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--surface);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.progress-step-running .progress-icon,
+.progress-thinking .progress-icon {
+  border-color: var(--border);
+  border-top-color: var(--brand);
+  animation: progress-spin 0.8s linear infinite;
+}
+.progress-step-done .progress-icon { background: var(--brand); border-color: var(--brand); }
+.progress-step-done .progress-icon::after { content: "\2713"; }
+.progress-step-failed .progress-icon { background: var(--red); border-color: var(--red); }
+.progress-step-failed .progress-icon::after { content: "\2715"; }
+
+/* the thread connecting one step to the next */
+.progress-step::before {
+  content: "";
+  position: absolute;
+  left: 0.625rem;
+  top: 1.75rem;
+  bottom: -0.35rem;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--border);
+}
+.progress-step:last-child::before { display: none; }
+.progress-steps:has(+ .progress-thinking:not([hidden])) .progress-step:last-child::before { display: block; }
+
+.progress-step-running .progress-label { font-weight: 600; }
+.progress-step-done .progress-label { color: var(--text-muted); }
+.progress-step-failed .progress-label { color: var(--red); font-weight: 600; }
+.progress-detail { color: var(--text-muted); font-size: var(--text-sm); }
+
+.progress-error {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.9rem;
+  background: var(--red-tint);
+  border-left: 3px solid var(--red);
+  border-radius: 0 6px 6px 0;
+  color: var(--red);
+}
+.progress-error[hidden] { display: none; }
+
+@keyframes progress-spin { to { transform: rotate(360deg); } }
+
 /* ---------- small screens ---------- */
 
 @media (max-width: 960px) {
@@ -959,10 +1046,10 @@ details[open] > .audit-summary .audit-count::after { transform: translateY(0.05e
   .runs-table .scope-cell { order: -1; flex-basis: 100%; }
   .runs-table td.col-action { position: absolute; right: 0; top: 50%; width: auto; transform: translateY(-50%); }
   :root { --text-h1: 1.65rem; }
-  .change { grid-template-columns: minmax(0, 1fr); }
-  .change .ack-form { grid-column: 1; }
-  .change-why { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .change-why dd { margin-bottom: 0.5rem; }
+  .change-body { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .change-body dd { margin-bottom: 0.9rem; }
+  .change .ack-form { margin-left: 0; }
+  .decision { flex-direction: column; align-items: stretch; }
   .audit-row { grid-template-columns: 1.5rem minmax(0, 1fr); row-gap: 0.15rem; }
   .audit-row > :not(.audit-icon) { grid-column: 2; }
   .audit-icon { grid-row: 1 / span 4; align-self: start; }
@@ -977,4 +1064,5 @@ details[open] > .audit-summary .audit-count::after { transform: translateY(0.05e
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  .progress-icon { animation: none !important; }
 }

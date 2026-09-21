@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
+{% import "_progress.html" as progress %}
 {% block title %}Agent console - Orbit{% endblock %}
 {% block content %}
   <div class="page-head">
@@ -146,11 +147,21 @@
         <button type="button" class="btn-secondary" data-back>Back</button>
         <button type="submit" class="approve run-btn">Run</button>
       </div>
-      <p class="edited-note">
-        This blocks until the agent finishes staging (or fails) &mdash; there is no progress bar yet.
-      </p>
     </section>
   </form>
+
+  <section class="console-panel card" id="step-3-progress" hidden>
+    <span class="step-title" id="progress-title">The agent is working</span>
+    <p class="chart-caption" id="progress-caption">
+      Each step is something the agent actually did. You'll land on the review page when it
+      finishes &mdash; nothing reaches Jira until you review it.
+    </p>
+    {{ progress.block() }}
+    <div class="console-actions">
+      <button type="button" class="btn-secondary" data-retry hidden>Back</button>
+      <span></span>
+    </div>
+  </section>
 
   <section class="console-panel card chat-card" id="step-3-chat" hidden>
     <span class="step-title">{{ level_name("L1") }} chat</span>
@@ -166,6 +177,8 @@
 
     {{ chat_thread_macro.chat_thread(chat_messages) }}
 
+    {{ progress.block() }}
+
     <form method="post" action="/chat" class="chat-form">
       <textarea name="message" placeholder="Ask about your Jira project..." required></textarea>
       <input type="hidden" name="redirect_to" value="/agent-console?level=L1">
@@ -178,6 +191,7 @@
     </div>
   </section>
 
+  <script src="/static/progress.js?v={{ script_version() }}"></script>
   <script>
     (function () {
       var LEVEL_DETAILS = {
@@ -296,6 +310,35 @@
       }
       updateLevelDetail();
       updateRecommendedBadge();
+
+      // With JavaScript the run happens in the background and the progress panel shows
+      // each real step as the agent takes it; without it the form posts and waits.
+      var taskForm = document.getElementById("task-form");
+      var progressPanel = document.getElementById("step-3-progress");
+      var progressBlock = progressPanel.querySelector(".progress");
+      var retryBtn = progressPanel.querySelector("[data-retry]");
+      var progressTitle = document.getElementById("progress-title");
+      var progressCaption = document.getElementById("progress-caption");
+      taskForm.addEventListener("submit", function (e) {
+        if (current !== 3) { e.preventDefault(); return; }  // Enter on an earlier step must not start a run
+        if (!window.OrbitProgress) return;                  // no script: post normally and wait
+        e.preventDefault();
+        document.querySelectorAll(".console-panel").forEach(function (el) { el.hidden = true; });
+        progressPanel.hidden = false;
+        retryBtn.hidden = true;
+        progressTitle.textContent = "The agent is working";
+        progressCaption.hidden = false;
+        OrbitProgress.start(progressBlock, "/agent-console/start", new FormData(taskForm), {
+          done: function (job) { setTimeout(function () { window.location.href = job.url; }, 600); },
+          failed: function (message) {
+            progressTitle.textContent = "The run stopped";
+            progressCaption.hidden = true;
+            OrbitProgress.fail(progressBlock, message);
+            retryBtn.hidden = false;
+          },
+        });
+      });
+      retryBtn.addEventListener("click", function () { showStep(3); });
 
       // Returning from a chat send (POST /chat redirect_to=/agent-console?level=L1) -
       // reopen straight on the chat step instead of resetting to step 1.

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Callable
 
 from dotenv import load_dotenv
 from google import genai
@@ -25,6 +26,7 @@ from mcp.client.stdio import StdioServerParameters
 from orchestrator.mcp_bridge import (
     REPO_ROOT,
     agent_identity,
+    emit_step,
     function_response_payload,
     mcp_tools_to_gemini,
     model_id,
@@ -72,6 +74,7 @@ async def run_reestimate_task(
     instructions: str,
     gemini: genai.Client | None = None,
     mcp_server: object | None = None,
+    on_step: Callable[[dict], None] | None = None,
 ) -> str:
     """Spawns the gateway at `level` as a subprocess, drives a full
     re-estimate run via Gemini's tool use, and returns the run_id once
@@ -85,6 +88,10 @@ async def run_reestimate_task(
     drive the real MCP dispatch/registration logic without spawning a
     subprocess or hitting real Jira. Production leaves both as the
     default: a real Gemini client and a real gateway subprocess.
+
+    `on_step`, if given, is called with a small event dict as each model call
+    and each tool call starts and ends (see mcp_bridge.emit_step) - that is how
+    the web UI shows a run's real steps live. It never affects the run.
 
     Raises OrchestratorError if Gemini never calls start_run at all (most
     likely because `level` has no write tools - L1), or stages proposals
@@ -130,7 +137,9 @@ async def run_reestimate_task(
         stalls = 0
 
         while calls_made < MAX_TOOL_CALLS:
+            emit_step(on_step, phase="model", state="start")
             response = await gemini_client.aio.models.generate_content(model=model, contents=contents, config=config)
+            emit_step(on_step, phase="model", state="end")
             candidate = response.candidates[0]
             contents.append(candidate.content)
 
@@ -153,8 +162,11 @@ async def run_reestimate_task(
             response_parts: list[genai_types.Part] = []
             for call in function_calls:
                 calls_made += 1
-                result = await mcp_client.call_tool(call.name, dict(call.args or {}))
+                args = dict(call.args or {})
+                emit_step(on_step, phase="tool", state="start", tool=call.name, args=args)
+                result = await mcp_client.call_tool(call.name, args)
                 payload = tool_result_payload(result)
+                emit_step(on_step, phase="tool", state="end", tool=call.name, ok=not result.is_error, result=payload)
 
                 if call.name == "start_run" and not result.is_error and run_id is None:
                     # start_run returns a bare str in Python, but MCP wraps a

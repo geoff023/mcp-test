@@ -121,3 +121,57 @@ async def test_orchestrator_at_l1_fails_cleanly_with_no_write_tools(conn, jira_w
         )
 
     assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_reports_each_real_step_to_the_progress_listener(conn, jira_with_spy):
+    """The web UI shows a run's steps live from these events, so they must be the
+    real tool calls in the real order - not a fixed script."""
+    jira, spy = jira_with_spy
+    spy.request.return_value.raise_for_status.return_value = None
+    spy.request.return_value.json.return_value = {"issues": []}
+    server = build_server("L3", jira=jira, conn=conn, agent="orchestrator:fake-model")
+    events: list[dict] = []
+
+    await run_reestimate_task(
+        level="L3",
+        target_jql="project = TEST",
+        instructions="",
+        gemini=_fake_gemini(_FakeModels()),
+        mcp_server=server,
+        on_step=events.append,
+    )
+
+    tool_events = [(e["tool"], e["state"]) for e in events if e["phase"] == "tool"]
+    assert tool_events == [
+        ("search_issues", "start"), ("search_issues", "end"),
+        ("start_run", "start"), ("start_run", "end"),
+        ("propose_estimate_change", "start"), ("propose_estimate_change", "end"),
+        ("finish_run", "start"), ("finish_run", "end"),
+    ]
+    assert events[0] == {"phase": "model", "state": "start"}  # waiting on the model comes first
+    proposal = next(e for e in events if e["phase"] == "tool" and e["tool"] == "propose_estimate_change")
+    assert proposal["args"]["issue_key"] == "TEST-1"
+    assert all(e["ok"] for e in events if e["phase"] == "tool" and e["state"] == "end")
+
+
+@pytest.mark.asyncio
+async def test_a_broken_progress_listener_never_breaks_the_run(conn, jira_with_spy):
+    jira, spy = jira_with_spy
+    spy.request.return_value.raise_for_status.return_value = None
+    spy.request.return_value.json.return_value = {"issues": []}
+    server = build_server("L3", jira=jira, conn=conn, agent="orchestrator:fake-model")
+
+    def broken(event):
+        raise RuntimeError("listener bug")
+
+    run_id = await run_reestimate_task(
+        level="L3",
+        target_jql="project = TEST",
+        instructions="",
+        gemini=_fake_gemini(_FakeModels()),
+        mcp_server=server,
+        on_step=broken,
+    )
+
+    assert conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()[0] == "awaiting_review"

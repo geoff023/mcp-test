@@ -1,0 +1,10 @@
+{# The live steps of a background job - filled in by static/progress.js. Shared
+   by the console's run panel and both chat surfaces so they look and behave
+   the same. Hidden until a job starts. #}
+{% macro block() %}
+  <div class="progress" hidden>
+    <ol class="progress-steps" aria-live="polite"></ol>
+    <p class="progress-thinking" hidden><span class="progress-icon" aria-hidden="true"></span>Thinking&hellip;</p>
+    <p class="progress-error" role="alert" hidden></p>
+  </div>
+{% endmacro %}

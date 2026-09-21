@@ -42,6 +42,9 @@
     {% endif %}
   </div>
 
+  {# Send back is always available while a run awaits review, except once an L4 token is out. #}
+  {% set can_decide = run["status"] == "awaiting_review" and not (run["level"] == "L4" and active_token) %}
+
   <h2>Staged changes</h2>
   <div class="card">
     {% if not rows %}
@@ -59,13 +62,15 @@
         {% for row in rows %}
           {% set change = row["change"] %}
           <li class="change">
-            <div class="change-what">
-              <div class="change-head">
-                <span class="change-key">{{ change["issue_key"] }}</span>
-                <span class="change-summary">{{ row["summary"] }}</span>
-                <span class="change-field">{{ humanize(change["field"]) }}</span>
-              </div>
-              <div class="change-diff">
+            <div class="change-head">
+              <span class="change-key">{{ change["issue_key"] }}</span>
+              <span class="change-summary">{{ row["summary"] }}</span>
+            </div>
+            {# One label column for everything about the change, so the value, the why and the
+               assumptions line up instead of sitting in separate columns. #}
+            <dl class="change-body">
+              <dt>{{ humanize(change["field"]) }}</dt>
+              <dd class="change-diff">
                 {% if row["old_value"] == "(none)" %}
                   <span class="change-old-none"><span class="visually-hidden">Old value: </span>no value yet</span>
                 {% else %}
@@ -81,9 +86,7 @@
                 {% else %}
                   <ins class="change-new"><span class="visually-hidden">New value: </span>{{ change["new_value"] }}</ins>
                 {% endif %}
-              </div>
-            </div>
-            <dl class="change-why">
+              </dd>
               <dt>Reasoning</dt>
               <dd>{{ change["reasoning"] }}</dd>
               <dt>Assumptions</dt>
@@ -105,17 +108,34 @@
           </li>
         {% endfor %}
       </ol>
-      {% if editable %}
-        <div class="actions">
-          <button type="submit" class="approve">Approve</button>
+      {% if editable %}</form>{% endif %}
+    {% endif %}
+
+    {% if can_decide %}
+      <div class="decision">
+        <div class="decision-primary">
+          {% if run["level"] == "L2" %}
+            {% if rows %}<button type="submit" form="approve-form" class="approve">Approve</button>{% endif %}
+          {% elif run["level"] == "L4" %}
+            <form method="post" action="/runs/{{ run['id'] }}/issue-token" class="inline-form">
+              <button type="submit" class="approve" {% if not all_acknowledged %}disabled{% endif %}>Issue token</button>
+              {% if not all_acknowledged %}<span class="edited-note">Acknowledge every change first.</span>{% endif %}
+            </form>
+          {% else %}
+            <form method="post" action="/runs/{{ run['id'] }}/approve" class="inline-form">
+              <button type="submit" class="approve">Approve</button>
+            </form>
+          {% endif %}
         </div>
+        <form method="post" action="/runs/{{ run['id'] }}/reject" class="inline-form">
+          <textarea name="comment" placeholder="Why is this being sent back? (optional)" aria-label="Reason for sending back"></textarea>
+          <button type="submit" class="reject">Send back</button>
         </form>
-      {% endif %}
+      </div>
     {% endif %}
   </div>
 
-  {% if run["level"] == "L4" and run["status"] == "awaiting_review" %}
-    {% if active_token %}
+  {% if run["level"] == "L4" and run["status"] == "awaiting_review" and active_token %}
       <div class="token-box">
         <p><strong>Token issued</strong> &mdash; hand this to the agent so it can call
           <code>commit_changes(run_id="{{ run['id'] }}", approval_token=&hellip;)</code>:</p>
@@ -137,36 +157,6 @@
           });
         });
       </script>
-    {% else %}
-      <div class="actions card">
-        <form method="post" action="/runs/{{ run['id'] }}/issue-token" class="inline-form">
-          <button type="submit" class="approve" {% if not all_acknowledged %}disabled{% endif %}>
-            Issue token
-          </button>
-        </form>
-        <form method="post" action="/runs/{{ run['id'] }}/reject" class="inline-form">
-          <textarea name="comment" placeholder="Why is this being sent back? (optional)"></textarea>
-          <button type="submit" class="reject">Send back</button>
-        </form>
-      </div>
-    {% endif %}
-  {% elif run["status"] == "awaiting_review" and run["level"] != "L2" %}
-    <div class="actions card">
-      <form method="post" action="/runs/{{ run['id'] }}/approve" class="inline-form">
-        <button type="submit" class="approve">Approve</button>
-      </form>
-      <form method="post" action="/runs/{{ run['id'] }}/reject" class="inline-form">
-        <textarea name="comment" placeholder="Why is this being sent back? (optional)"></textarea>
-        <button type="submit" class="reject">Send back</button>
-      </form>
-    </div>
-  {% elif run["status"] == "awaiting_review" %}
-    <div class="actions card">
-      <form method="post" action="/runs/{{ run['id'] }}/reject" class="inline-form">
-        <textarea name="comment" placeholder="Why is this being sent back? (optional)"></textarea>
-        <button type="submit" class="reject">Send back</button>
-      </form>
-    </div>
   {% endif %}
 
   {% if run["status"] in ("applied", "rejected") %}

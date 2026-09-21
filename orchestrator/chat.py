@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Callable
 
 from dotenv import load_dotenv
 from google import genai
@@ -27,6 +28,7 @@ from mcp.client.stdio import StdioServerParameters
 from orchestrator.mcp_bridge import (
     REPO_ROOT,
     agent_identity,
+    emit_step,
     function_response_payload,
     mcp_tools_to_gemini,
     model_id,
@@ -62,6 +64,7 @@ async def run_chat_turn(
     message: str,
     gemini: genai.Client | None = None,
     mcp_server: object | None = None,
+    on_step: Callable[[dict], None] | None = None,
 ) -> tuple[str, list[str]]:
     """Runs one L1 chat turn and returns (answer_text, tool_calls_made).
 
@@ -108,7 +111,9 @@ async def run_chat_turn(
         final_text: str | None = None
 
         while calls_made < MAX_TOOL_CALLS:
+            emit_step(on_step, phase="model", state="start")
             response = await gemini_client.aio.models.generate_content(model=model, contents=contents, config=config)
+            emit_step(on_step, phase="model", state="end")
             candidate = response.candidates[0]
             contents.append(candidate.content)
 
@@ -120,9 +125,12 @@ async def run_chat_turn(
             response_parts: list[genai_types.Part] = []
             for call in function_calls:
                 calls_made += 1
-                tool_calls_made.append(f"{call.name}({dict(call.args or {})})")
-                result = await mcp_client.call_tool(call.name, dict(call.args or {}))
+                args = dict(call.args or {})
+                tool_calls_made.append(f"{call.name}({args})")
+                emit_step(on_step, phase="tool", state="start", tool=call.name, args=args)
+                result = await mcp_client.call_tool(call.name, args)
                 payload = tool_result_payload(result)
+                emit_step(on_step, phase="tool", state="end", tool=call.name, ok=not result.is_error, result=payload)
                 response_payload = function_response_payload(call.name, result.is_error, payload)
                 response_parts.append(
                     genai_types.Part.from_function_response(name=call.name, response=response_payload)

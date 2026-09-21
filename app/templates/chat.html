@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
+{% import "_progress.html" as progress %}
 {% block title %}{{ level_name("L1") }} chat - Orbit{% endblock %}
 {% block content %}
   <div class="page-head">
@@ -19,10 +20,13 @@
   <div class="card chat-card">
     {{ chat_thread_macro.chat_thread(messages) }}
 
+    {{ progress.block() }}
+
     <form method="post" action="/chat" class="chat-form">
       <textarea name="message" placeholder="Ask about your Jira project..." required></textarea>
       <input type="hidden" name="redirect_to" value="/chat">
       <button type="submit" class="approve run-btn">Send</button>
     </form>
   </div>
+  <script src="/static/progress.js?v={{ script_version() }}"></script>
 {% endblock %}
