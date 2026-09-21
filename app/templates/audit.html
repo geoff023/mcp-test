@@ -1,17 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Audit log - Orbit{% endblock %}
+{% set page_title = "Activity" %}
 {% block content %}
-  <div class="page-head">
-    <h1>Audit log</h1>
-  </div>
   <p class="page-subtitle">
-    Every proposal, approval, refusal and commit, with who did it and at what autonomy level.
-    Nothing here is ever edited or deleted. Runs are grouped &mdash; open one to see its steps.
+    Everything the agents did and every decision you made, newest first. Nothing here is ever
+    edited or deleted. Runs are grouped &mdash; open one to see its steps.
   </p>
+
+  <nav class="filter-tabs" aria-label="Filter activity">
+    {% for key, label in filters %}
+      <a class="filter-tab {{ 'active' if key == show }}" href="/audit{{ '' if key == 'all' else '?show=' ~ key }}"
+         {% if key == show %}aria-current="page"{% endif %}>{{ label }}{% if key == "needs" and counts.needs %} &middot; {{ counts.needs }}{% endif %}</a>
+    {% endfor %}
+  </nav>
 
   <div class="card audit-card">
     {% if not groups %}
-      <p class="empty">Nothing logged yet. Once an agent proposes or applies something, every step shows up here.</p>
+      <p class="empty">
+        {% if show == "all" %}Nothing logged yet. Once an agent proposes or applies something, every step shows up here.
+        {% else %}Nothing matches this filter.{% endif %}
+      </p>
     {% else %}
       {% for group in groups %}
         {% set head = group.rows[0] %}

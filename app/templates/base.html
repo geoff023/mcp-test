@@ -1,45 +1,89 @@
+{# App shell from the v7 prototype: sidebar (project, nav, Jira card) + top bar.
+   Pages set `page_title` (and optionally `crumb`) at the top of the child template. #}
+{% set sh = shell() %}
+{% set path = request.url.path %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Orbit{% endblock %}</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6e73'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3E%E2%97%86%3C/text%3E%3C/svg%3E">
+  <title>{{ page_title or "Orbit" }} - Orbit</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;600&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/static/style.css?v={{ static_version() }}">
 </head>
 <body>
-  <header class="site-header">
-    <div class="site-header-inner">
-      <a href="/" class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">Orbit</span>
-        <span class="brand-tagline">Multi-Agent Project Management</span>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="project" href="/dashboard" aria-label="Orbit, Jira project {{ sh.project_key }}">
+        <span class="project-card">
+          <img class="project-logo" src="/static/orbit-wordmark.png" alt="Orbit" width="76" height="24">
+          <span class="project-sub">Jira &middot; {{ sh.project_key or "not set" }}</span>
+        </span>
       </a>
-      <nav aria-label="Main">
-        <a href="/" class="{{ 'active' if request.url.path == '/' or request.url.path.startswith('/runs/') else '' }}">Runs</a>
-        <a href="/agent-console" class="{{ 'active' if request.url.path == '/agent-console' else '' }}">Agent console</a>
-        <a href="/chat" class="{{ 'active' if request.url.path == '/chat' else '' }}">Chat</a>
-        <span class="nav-divider" aria-hidden="true"></span>
-        <a href="/dashboard" class="{{ 'active' if request.url.path == '/dashboard' else '' }}">Dashboard</a>
-        <a href="/audit" class="{{ 'active' if request.url.path == '/audit' else '' }}">Audit log</a>
+
+      <nav class="side-nav" aria-label="Main">
+        <a href="/dashboard" class="nav-item {{ 'active' if path == '/dashboard' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 9.5 10 4l6.5 5.5V16a.5.5 0 0 1-.5.5h-3.5v-4h-5v4H4a.5.5 0 0 1-.5-.5z"/></svg>Dashboard
+        </a>
+
+        <span class="nav-label">AGENTS</span>
+        <a href="/agent-console" class="nav-item {{ 'active' if path == '/agent-console' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 7v6M7 10h6"/></svg>New task
+        </a>
+        <a href="/chat" class="nav-item {{ 'active' if path == '/chat' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12v8H9l-3 2.5V13H4V5z"/></svg>Chat
+        </a>
+        <a href="/approvals" class="nav-item {{ 'active' if path == '/approvals' or path.startswith('/runs/') }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 13.5V9a4.5 4.5 0 0 1 9 0v4.5l1 1.5h-11zM8.5 16.5a1.5 1.5 0 0 0 3 0"/></svg>Approvals
+          {% if sh.awaiting %}<span class="nav-badge" aria-label="{{ sh.awaiting }} waiting">{{ sh.awaiting }}</span>{% endif %}
+        </a>
+        <a href="/audit" class="nav-item {{ 'active' if path == '/audit' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 6.5V10l2.5 1.5"/></svg>Activity
+        </a>
+
+        <span class="nav-label">CONFIGURATION</span>
+        <a href="/settings" class="nav-item {{ 'active' if path == '/settings' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h8M15 6h1M4 10h2M9 10h7M4 14h9M16 14h0"/><circle cx="13.5" cy="6" r="1.5"/><circle cx="7.5" cy="10" r="1.5"/><circle cx="14.5" cy="14" r="1.5"/></svg>Settings
+        </a>
       </nav>
+
+      <div class="jira-card">
+        <span class="jira-status"><span class="jira-dot {{ '' if sh.jira_host else 'off' }}"></span>{{ "Jira site" if sh.jira_host else "Jira not configured" }}</span>
+        {% if sh.jira_host %}<span class="jira-site" title="{{ sh.jira_host }}">{{ sh.jira_host }}</span>{% endif %}
+      </div>
+    </aside>
+
+    <div class="main-col">
+      <header class="topbar">
+        <div>
+          <p class="crumb">{{ sh.project_key }}{% if sh.project_key %} &rsaquo; {% endif %}{{ crumb or page_title }}</p>
+          <h1>{{ page_title }}</h1>
+        </div>
+        <div class="topbar-actions">
+          {% if sh.jira_url %}
+            <a class="button-link outline" href="{{ sh.jira_url }}" target="_blank" rel="noopener">Open in Jira</a>
+          {% endif %}
+        </div>
+      </header>
+
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="site-footer">
+        <div class="site-footer-inner">
+          <span aria-hidden="true">⚠</span>
+          <span>
+            Orbit is a research prototype. Agents can make mistakes — reasoning, proposed
+            values, and chat answers may be inaccurate, and nothing reaches Jira without a human
+            step in between. Always verify before you approve, issue a token, or act on what it says.
+          </span>
+        </div>
+      </footer>
     </div>
-  </header>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="site-footer">
-    <div class="site-footer-inner">
-      <span class="site-footer-icon" aria-hidden="true">⚠</span>
-      <span>
-        Orbit is a research prototype. Agents can make mistakes — reasoning, proposed
-        values, and chat answers may be inaccurate, and nothing reaches Jira without a human
-        step in between. Always verify before you approve, issue a token, or act on what it says.
-      </span>
-    </div>
-  </footer>
+  </div>
 </body>
 </html>

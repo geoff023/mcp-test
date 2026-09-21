@@ -128,16 +128,16 @@ def test_rejected_run_note_says_nothing_reached_jira(client, conn, jira_with_spy
 def test_active_nav_link_is_marked_on_each_page(client):
     test_client, _ = client
 
-    assert 'class="active"' in test_client.get("/agent-console").text
-    assert 'class="active"' in test_client.get("/chat").text
-    assert 'class="active"' in test_client.get("/audit").text
-    assert 'class="active"' in test_client.get("/").text
+    for path in ("/agent-console", "/chat", "/audit", "/approvals", "/settings", "/dashboard"):
+        html = test_client.get(path).text
+        assert html.count("nav-item active") == 1, path
+        assert f'href="{path}" class="nav-item active"' in html, path
 
 
 def test_footer_disclaimer_present_on_every_page(client):
     test_client, _ = client
 
-    for path in ("/", "/agent-console", "/chat", "/audit"):
+    for path in ("/approvals", "/dashboard", "/agent-console", "/chat", "/audit", "/settings"):
         resp = test_client.get(path)
         assert "research prototype" in resp.text
         assert "Agents can make mistakes" in resp.text

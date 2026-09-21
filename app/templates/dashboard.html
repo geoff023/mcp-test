@@ -1,29 +1,57 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - Orbit{% endblock %}
+{% set page_title = "Dashboard" %}
 {% block content %}
-  <div class="page-head">
-    <h1>Dashboard</h1>
-  </div>
+  {% set sh = shell() %}
   <p class="page-subtitle">
-    A read-only snapshot of the whole project: where issues stand, how much estimated work is
-    left, and what might need your attention. Nothing on this page can change Jira.
+    A read-only snapshot of the project: where issues stand, how much estimated work is left,
+    and what needs you. Nothing on this page can change Jira.
   </p>
-  <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-value">{{ data.total_issues }}</div>
-      <div class="stat-label">Total issues</div>
+
+  {% if jira_error %}
+    <div class="ai-disclaimer" role="alert">
+      <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
+      <span>{{ jira_error }}</span>
     </div>
-    <div class="stat-card">
-      <div class="stat-value">{{ data.done_points|round(1) }} <span class="stat-value-of">/ {{ data.total_points|round(1) }}</span></div>
-      <div class="stat-label">Story points done</div>
+  {% endif %}
+
+  <div class="kpi-grid">
+    <div class="kpi" title="Story points on issues in a done status. Counts points, not issues.">
+      <span class="kpi-label">Story points done</span>
+      <span class="kpi-value">{{ data.done_points|round(1) }} <span class="kpi-of">/ {{ data.total_points|round(1) }} pts</span></span>
+      <span class="kpi-sub">{{ points_pct }}% of all estimated points</span>
+      <span class="kpi-track" role="img" aria-label="{{ points_pct }} percent of points done"><span style="width: {{ points_pct }}%"></span></span>
     </div>
-    <div class="stat-card">
-      <div class="stat-value">{{ data.unestimated_count }}</div>
-      <div class="stat-label">Unestimated stories</div>
+
+    <div class="kpi" title="Stories with no story-point estimate. This is the work the Effort estimation task picks up.">
+      <span class="kpi-label">Unestimated stories</span>
+      <span class="kpi-value">{{ data.unestimated_count }}</span>
+      <span class="kpi-sub">
+        Out of {{ data.total_issues }} issues
+        {% if data.unestimated_count %}&middot; <a href="/agent-console?scope=unestimated">Estimate them</a>{% endif %}
+      </span>
     </div>
-    <div class="stat-card">
-      <div class="stat-value">{{ data.overdue|length }}</div>
-      <div class="stat-label">Overdue issues</div>
+
+    <div class="kpi" title="Runs whose proposals are waiting for a person to approve or send back.">
+      <span class="kpi-label">Pending approvals</span>
+      <span class="kpi-value">{{ sh.awaiting }}</span>
+      <span class="kpi-sub">
+        {% if sh.awaiting %}Across {{ pending_levels }} autonomy {{ "level" if pending_levels == 1 else "levels" }} &middot; <a href="/approvals">Review</a>
+        {% else %}Nothing is waiting for you{% endif %}
+      </span>
+    </div>
+
+    <div class="kpi" title="Runs started from New task. Chat questions are not runs.">
+      <span class="kpi-label">Agent runs</span>
+      <span class="kpi-value">{{ run_total }}</span>
+      <span class="kpi-sub">By autonomy level</span>
+      {% if run_split %}
+        <span class="kpi-split" role="img" aria-label="Runs by autonomy level">
+          {% for r in run_split %}<span class="level-card-{{ r.level }}" style="width: {{ r.pct }}%"></span>{% endfor %}
+        </span>
+        <span class="kpi-split-legend">
+          {% for r in run_split %}<span class="level-card-{{ r.level }}">{{ r.name }} {{ r.count }}</span>{% endfor %}
+        </span>
+      {% endif %}
     </div>
   </div>
 
@@ -52,8 +80,9 @@
   <h2>Story points remaining over time</h2>
   <div class="card chart-card chart-card-wide">
     <p class="chart-caption">
-      Not a sprint burndown &mdash; this prototype has no sprint start/end dates. This tracks total remaining estimated points over the last 21
-      days, built from each story's actual Jira resolution date.
+      Not a sprint burndown &mdash; this prototype has no sprint start or end dates. This tracks
+      total remaining estimated points over the last 21 days, built from each story's actual Jira
+      resolution date.
     </p>
     {{ burndown_chart }}
   </div>
@@ -111,7 +140,7 @@
     </div>
   {% endif %}
 
-  <h2>Suggestions &amp; things to watch</h2>
+  <h2>Recommended next steps</h2>
   <div class="card">
     <ul class="suggestion-list">
       {% for s in data.suggestions %}

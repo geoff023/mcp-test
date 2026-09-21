@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Run {{ run["id"][:8] }} - Orbit{% endblock %}
+{% set page_title = "Run " ~ run["id"][:8] %}
+{% set crumb = "Approvals › Run " ~ run["id"][:8] %}
 {% block content %}
   {% set editable = run["level"] == "L2" and run["status"] == "awaiting_review" %}
   {% set ack_mode = run["level"] == "L4" and run["status"] == "awaiting_review" and not active_token %}
 
-  <p class="back-link"><a href="/">All runs</a></p>
+  <p class="back-link"><a href="/approvals">All approvals</a></p>
 
   <div class="page-head">
-    <h1>Run {{ run["id"][:8] }}</h1>
     <span class="status status-{{ run['status'] }}">{{ humanize(run["status"]) }}</span>
   </div>
   {% if status_note %}<p class="status-note">{{ status_note }}</p>{% endif %}

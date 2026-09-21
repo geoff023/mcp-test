@@ -11,10 +11,12 @@ for audit parity with the L4 path.
 from __future__ import annotations
 
 import sqlite3
+import sys
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -23,15 +25,25 @@ from fastapi.templating import Jinja2Templates
 
 from app import jobs
 from app.analytics import STATUS_CATEGORY_LABELS, STATUS_CATEGORY_ORDER, build_dashboard_data
-from app.run_display import clock_time, friendly_scope, full_datetime, humanize, short_date
-from app.audit_display import friendly_action, friendly_actor, friendly_detail, group_audit_rows, outcome_icon
+from app.run_display import ago, clock_time, friendly_scope, full_datetime, humanize, short_date
+from app.audit_display import (
+    ACTIVITY_FILTERS,
+    filter_counts,
+    filter_groups,
+    friendly_action,
+    friendly_actor,
+    friendly_detail,
+    group_audit_rows,
+    outcome_icon,
+)
 from app.charts import area_chart, bar_chart, donut_chart
 from app.chat_markdown import render_chat_markdown
-from app.levels import level_name, level_tagline
+from app.levels import LEVEL_DISPLAY, READ_TOOLS, TASK_TYPES, level_name, level_tagline, tool_label
 from db.audit import log_audit
 from db.migrate import get_connection
 from gateway.apply import apply_staged_changes
 from gateway.jira import JiraClient
+from gateway.server import TOOLS_BY_LEVEL
 from orchestrator.agent import OrchestratorError, run_reestimate_task
 from orchestrator.chat import ChatError, run_chat_turn
 
@@ -51,7 +63,7 @@ templates.env.globals["render_chat_markdown"] = render_chat_markdown
 templates.env.globals["friendly_action"] = friendly_action
 templates.env.globals["friendly_actor"] = friendly_actor
 templates.env.globals["friendly_detail"] = friendly_detail
-for _fn in (clock_time, friendly_scope, full_datetime, humanize, short_date):
+for _fn in (ago, clock_time, friendly_scope, full_datetime, humanize, short_date, tool_label):
     templates.env.globals[_fn.__name__] = _fn
 templates.env.globals["outcome_icon"] = outcome_icon
 
@@ -86,7 +98,28 @@ templates.env.globals["script_version"] = _script_version
 _conn = get_connection()
 _conn.row_factory = sqlite3.Row
 _jira = JiraClient()
-_lock = threading.Lock()
+_lock = threading.RLock()  # re-entrant: shell() reads the DB during template rendering
+
+
+def _shell() -> dict:
+    """What the sidebar and top bar show on every page: the Jira project, the
+    Approvals badge (runs waiting on a human) and a link out to Jira. The
+    'Jira site' card reports that credentials are configured, not a live check -
+    a per-page-view round trip to Jira would make every page slow."""
+    config = getattr(_jira, "config", None)
+    base = (getattr(config, "base_url", "") or "").rstrip("/")
+    key = getattr(config, "project_key", "") or ""
+    with _lock:
+        awaiting = _conn.execute("SELECT COUNT(*) FROM runs WHERE status = 'awaiting_review'").fetchone()[0]
+    return {
+        "awaiting": awaiting,
+        "project_key": key,
+        "jira_host": urlparse(base).netloc if base else "",
+        "jira_url": f"{base}/browse/{key}" if base and key else "",
+    }
+
+
+templates.env.globals["shell"] = _shell
 
 
 def _now() -> str:
@@ -113,14 +146,27 @@ def _display_old_value(change: sqlite3.Row, live_issue) -> object:
 
 
 @app.get("/")
+def home():
+    """The prototype's first nav item, and so the landing page, is the Dashboard."""
+    return RedirectResponse(url="/dashboard", status_code=307)
+
+
+@app.get("/approvals")
 def list_runs(request: Request):
+    """The decision inbox: runs waiting on a human first (oldest first, so
+    nothing sits forgotten), then every earlier run."""
     with _lock:
         runs = _conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
-        awaiting_review_count = _conn.execute(
-            "SELECT COUNT(*) FROM runs WHERE status = 'awaiting_review'"
-        ).fetchone()[0]
+        change_counts = {
+            row["run_id"]: row["n"]
+            for row in _conn.execute("SELECT run_id, COUNT(*) AS n FROM staged_changes GROUP BY run_id")
+        }
+    waiting = sorted((r for r in runs if r["status"] == "awaiting_review"), key=lambda r: r["created_at"])
+    past = [r for r in runs if r["status"] != "awaiting_review"]
     return templates.TemplateResponse(
-        request, "index.html", {"runs": runs, "awaiting_review_count": awaiting_review_count}
+        request,
+        "index.html",
+        {"waiting": waiting, "past": past, "change_counts": change_counts, "awaiting_review_count": len(waiting)},
     )
 
 
@@ -145,7 +191,16 @@ def agent_console(request: Request, scope: str = "unestimated", level: str = "L3
             "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id", (session_id,)
         ).fetchall()
     return templates.TemplateResponse(
-        request, "agent_console.html", {"default_scope": scope, "default_level": level, "chat_messages": messages}
+        request,
+        "agent_console.html",
+        {
+            "default_scope": scope,
+            "default_level": level,
+            "chat_messages": messages,
+            "task_types": TASK_TYPES,
+            "task_recs": {task["slug"]: task["recommended"] for task in TASK_TYPES},
+            "level_facts": {code: {"creates": d["creates"], "writes": d["writes"]} for code, d in LEVEL_DISPLAY.items()},
+        },
     )
 
 
@@ -479,10 +534,37 @@ def reject_run(run_id: str, comment: str = Form(default="")):
 
 
 @app.get("/audit")
-def show_audit(request: Request):
+def show_audit(request: Request, show: str = "all"):
     with _lock:
         rows = _conn.execute("SELECT * FROM audit_log ORDER BY id DESC").fetchall()
-    return templates.TemplateResponse(request, "audit.html", {"groups": group_audit_rows(rows)})
+    groups = group_audit_rows(rows)
+    if show not in dict(ACTIVITY_FILTERS):
+        show = "all"
+    return templates.TemplateResponse(
+        request,
+        "audit.html",
+        {
+            "groups": filter_groups(groups, show),
+            "filters": ACTIVITY_FILTERS,
+            "counts": filter_counts(groups),
+            "show": show,
+        },
+    )
+
+
+@app.get("/settings")
+def show_settings(request: Request):
+    """Read-only: what each autonomy level may do, straight from the tool table
+    the gateway enforces (TOOLS_BY_LEVEL) - not a copy that could drift."""
+    levels = [
+        {
+            "code": code,
+            **LEVEL_DISPLAY[code],
+            "tools": [{"label": tool_label(t), "write": t not in READ_TOOLS} for t in TOOLS_BY_LEVEL[code]],
+        }
+        for code in ("L1", "L2", "L3", "L4")
+    ]
+    return templates.TemplateResponse(request, "settings.html", {"levels": levels, "task_types": TASK_TYPES})
 
 
 _STATUS_CATEGORY_COLORS = ("var(--viz-todo)", "var(--viz-doing)", "var(--viz-done)")
@@ -496,8 +578,24 @@ def show_dashboard(request: Request):
     stale dashboard is worse than one extra Jira round-trip per view.
     """
     jql = f"project = {_jira.config.project_key} ORDER BY created ASC"
-    rows = _jira.search_issues_for_analytics(jql)
+    jira_error = None
+    try:
+        rows = _jira.search_issues_for_analytics(jql)
+    except Exception as exc:  # noqa: BLE001 - the landing page must still load without Jira
+        print(f"dashboard: Jira unreachable: {exc!r}", file=sys.stderr)
+        rows, jira_error = [], "Couldn't reach Jira, so project numbers are empty. Runs and approvals below still come from Orbit."
     data = build_dashboard_data(rows)
+
+    with _lock:
+        run_counts = {r["level"]: r["n"] for r in _conn.execute("SELECT level, COUNT(*) AS n FROM runs GROUP BY level")}
+        pending_levels = len(_conn.execute("SELECT DISTINCT level FROM runs WHERE status = 'awaiting_review'").fetchall())
+    run_total = sum(run_counts.values())
+    run_split = [
+        {"level": code, "name": level_name(code), "count": run_counts[code], "pct": max(round(run_counts[code] / run_total * 100), 8)}
+        for code in ("L1", "L2", "L3", "L4")
+        if run_counts.get(code)
+    ]
+    points_pct = round(data.done_points / data.total_points * 100) if data.total_points else 0
 
     status_bars = [
         {"label": STATUS_CATEGORY_LABELS[key], "value": data.status_counts[key], "color": color}
@@ -522,6 +620,11 @@ def show_dashboard(request: Request):
             "status_chart": bar_chart(status_bars),
             "estimate_chart": donut_chart(estimate_segments, center_label="estimated", center_value=f"{estimated_pct}%"),
             "burndown_chart": area_chart(burndown_points),
+            "jira_error": jira_error,
+            "run_total": run_total,
+            "run_split": run_split,
+            "pending_levels": pending_levels,
+            "points_pct": points_pct,
         },
     )
 

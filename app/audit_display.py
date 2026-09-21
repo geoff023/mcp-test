@@ -112,3 +112,46 @@ def group_audit_rows(rows: list[sqlite3.Row]) -> list[dict]:
         else:
             groups.append({"run_id": run_id, "rows": chunk})
     return groups
+
+
+# Filter tabs on the Activity page: (key, label). "all" is always first.
+ACTIVITY_FILTERS = [
+    ("all", "All"),
+    ("changed", "Changed Jira"),
+    ("needs", "Needs you"),
+    ("rejected", "Rejected"),
+    ("advice", "Advice only"),
+]
+
+
+def group_kinds(group: dict) -> set[str]:
+    """Which filter tabs a group belongs to (a group can be in several).
+    changed: something was applied to Jira. needs: the run is still waiting
+    on a human (its newest step is awaiting_review). rejected: sent back.
+    advice: a chat answer - nothing was written."""
+    rows = group["rows"]
+    kinds = set()
+    if any(r["outcome"] == "applied" for r in rows):
+        kinds.add("changed")
+    if rows[0]["outcome"] == "awaiting_review":
+        kinds.add("needs")
+    if any(r["action"] == "reject" for r in rows):
+        kinds.add("rejected")
+    if group["run_id"] is None and rows[0]["action"] == "chat_turn":
+        kinds.add("advice")
+    return kinds
+
+
+def filter_groups(groups: list[dict], key: str) -> list[dict]:
+    if key == "all" or key not in dict(ACTIVITY_FILTERS):
+        return groups
+    return [g for g in groups if key in group_kinds(g)]
+
+
+def filter_counts(groups: list[dict]) -> dict[str, int]:
+    counts = {key: 0 for key, _ in ACTIVITY_FILTERS}
+    counts["all"] = len(groups)
+    for g in groups:
+        for kind in group_kinds(g):
+            counts[kind] += 1
+    return counts

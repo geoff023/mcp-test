@@ -1,21 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Runs - Orbit{% endblock %}
+{% set page_title = "Approvals" %}
 {% block content %}
   <div class="page-head">
-    <h1>Runs</h1>
-    {% if awaiting_review_count %}
-      <span class="awaiting-review-badge">{{ awaiting_review_count }} awaiting review</span>
-    {% endif %}
-    <a href="/agent-console" class="button-link">New run</a>
+    <p class="page-subtitle">Agents pause here when they need your decision. Approve is the only action that writes to Jira.</p>
+    <a class="grow" href="/audit">Past decisions are in Activity</a>
   </div>
-  <p class="page-subtitle">Nothing reaches Jira until a run is applied.</p>
 
+  <p class="count-line">{{ waiting|length }} waiting for you</p>
+  {% if waiting %}
+    <div class="queue">
+      {% for run in waiting %}
+        {% set n = change_counts.get(run["id"], 0) %}
+        <a class="queue-card level-{{ run['level'] }}" href="/runs/{{ run['id'] }}">
+          <span class="queue-top">
+            <span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span>
+            <span class="queue-age">Ready {{ ago(run["created_at"]) }}</span>
+          </span>
+          <span class="queue-title">{{ friendly_scope(run["scope"]) }}</span>
+          <span class="queue-meta">
+            {{ "Effort estimation" if run["task_type"] == "reestimate" else run["task_type"] }}
+            &middot; {{ n }} {{ "change" if n == 1 else "changes" }}
+          </span>
+          <span class="queue-foot"><span class="button-link small">Review</span></span>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card"><p class="empty">Nothing is waiting for you. <a href="/agent-console">Start a new task</a> and anything the agents propose will show up here.</p></div>
+  {% endif %}
+
+  <h2>Earlier runs</h2>
   <div class="card">
-    {% if not runs %}
-      <p class="empty">No runs yet. Start one from the <a href="/agent-console">Agent console</a>.</p>
+    {% if not past %}
+      <p class="empty">No earlier runs yet.</p>
     {% else %}
       {# The task column only earns its space once there is more than one kind of task. #}
-      {% set show_task = runs|map(attribute="task_type")|unique|list|length > 1 %}
+      {% set show_task = past|map(attribute="task_type")|unique|list|length > 1 %}
       <table class="runs-table">
         <thead>
           <tr>
@@ -28,7 +48,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for run in runs %}
+          {% for run in past %}
             <tr>
               <td class="muted"><time class="hover-tip" datetime="{{ run['created_at'] }}" title="{{ full_datetime(run['created_at']) }}">{{ short_date(run["created_at"]) }}</time></td>
               <td><span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span></td>
@@ -36,7 +56,7 @@
               <td class="scope-cell"><span title="{{ run['scope'] }}">{{ friendly_scope(run["scope"]) }}</span></td>
               <td><span class="status status-{{ run['status'] }}">{{ humanize(run["status"]) }}</span></td>
               <td class="col-action">
-                <a class="icon-link" href="/runs/{{ run['id'] }}" aria-label="Review run {{ run['id'][:8] }}" title="Review">
+                <a class="icon-link" href="/runs/{{ run['id'] }}" aria-label="View run {{ run['id'][:8] }}" title="View">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M1.8 10S4.7 4.8 10 4.8 18.2 10 18.2 10 15.3 15.2 10 15.2 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.5"/></svg>
                 </a>
               </td>

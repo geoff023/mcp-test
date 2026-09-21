@@ -29,7 +29,7 @@ def test_chat_get_with_no_messages_shows_empty_state(client):
     resp = test_client.get("/chat")
 
     assert resp.status_code == 200
-    assert "No messages yet" in resp.text
+    assert "What should the agents advise on?" in resp.text
 
 
 def test_chat_post_persists_both_turns_and_logs_audit(client, conn, monkeypatch):

@@ -118,3 +118,42 @@ def test_friendly_detail_explains_a_guardrail_refusal_without_python_reprs():
     detail = "refused due-date change on MCP-4: issue_type='Milestone', labels=['milestone']"
     text = friendly_detail("propose_due_date_change", detail)
     assert text == "MCP-4 is a milestone, so its due date can't be changed"
+
+
+def _group(rows, run_id="run-1"):
+    return {"run_id": run_id, "rows": rows}
+
+
+def _row(**kw):
+    base = {"action": "start_run", "outcome": "ok"}
+    return {**base, **kw}
+
+
+def test_group_kinds_classify_what_happened_to_a_run():
+    from app.audit_display import group_kinds
+
+    applied = _group([_row(action="approve", outcome="applied"), _row()])
+    waiting = _group([_row(action="finish_run", outcome="awaiting_review"), _row()])
+    sent_back = _group([_row(action="reject", outcome="rejected"), _row()])
+    chat = _group([_row(action="chat_turn", outcome="answered")], run_id=None)
+
+    assert group_kinds(applied) == {"changed"}
+    assert group_kinds(waiting) == {"needs"}
+    assert group_kinds(sent_back) == {"rejected"}
+    assert group_kinds(chat) == {"advice"}
+
+
+def test_filter_groups_and_counts_and_unknown_filter_falls_back_to_all():
+    from app.audit_display import filter_counts, filter_groups
+
+    groups = [
+        _group([_row(action="approve", outcome="applied")]),
+        _group([_row(action="finish_run", outcome="awaiting_review")], run_id="run-2"),
+        _group([_row(action="chat_turn", outcome="answered")], run_id=None),
+    ]
+
+    assert len(filter_groups(groups, "all")) == 3
+    assert len(filter_groups(groups, "advice")) == 1
+    assert filter_groups(groups, "needs") == [groups[1]]
+    assert len(filter_groups(groups, "nonsense")) == 3
+    assert filter_counts(groups) == {"all": 3, "changed": 1, "needs": 1, "rejected": 0, "advice": 1}

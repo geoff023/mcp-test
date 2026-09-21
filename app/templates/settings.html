@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set page_title = "Settings" %}
+{% set crumb = "Settings › Agent permissions" %}
+{% block content %}
+  <p class="page-subtitle">
+    What each mode lets an agent do. This page is read-only: it shows the rules the gateway
+    enforces, taken straight from the tool table &mdash; not a copy that could drift from it.
+  </p>
+
+  <h2>Agent permissions</h2>
+  <div class="card">
+    <table class="perm-table">
+      <thead>
+        <tr><th>Mode</th><th>Tools the agent is given</th><th>Creates</th><th>Writes to Jira</th></tr>
+      </thead>
+      <tbody>
+        {% for lv in levels %}
+          <tr>
+            <td>
+              <span class="level-pill level-{{ lv.code }}">{{ lv.name }}</span>
+              <div class="muted" style="margin-top:4px">{{ lv.tagline }}</div>
+            </td>
+            <td>
+              <ul class="tool-list">
+                {% for t in lv.tools %}<li class="tool {{ 'write' if t.write }}">{{ t.label }}</li>{% endfor %}
+              </ul>
+            </td>
+            <td>{{ lv.creates }}</td>
+            <td>{{ lv.writes }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="chart-caption" style="margin-top:14px">
+      Orange tools stage or apply changes. Consultant has none of them: they are absent from its
+      tool list, not switched off. There is no mode where an agent writes without a person in the loop.
+    </p>
+  </div>
+
+  <h2>Guardrails</h2>
+  <div class="card guardrail">
+    <div>
+      <strong>Milestone due dates</strong>
+      <span class="muted">
+        No agent, at any mode, may change the due date of an issue that is a milestone. The gateway
+        refuses the call and records the refusal; the agent cannot negotiate with it.
+      </span>
+    </div>
+  </div>
+
+  <h2>Recommended mode by task type</h2>
+  <div class="card">
+    <table class="perm-table">
+      <thead><tr><th>Task</th><th>Recommended mode</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for task in task_types %}
+          <tr>
+            <td>{{ task.label }}</td>
+            <td><span class="level-pill level-{{ task.recommended }}">{{ level_name(task.recommended) }}</span></td>
+            <td>{{ "Available" if task.available else "Coming soon" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="chart-caption" style="margin-top:14px">Shown on the New task page. You can still choose any mode.</p>
+  </div>
+{% endblock %}

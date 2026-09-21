@@ -214,17 +214,18 @@ def test_index_reports_awaiting_review_count(client, conn):
     _insert_run(conn, "r2", "awaiting_review")
     _insert_run(conn, "r3", "applied")
 
-    resp = test_client.get("/")
+    resp = test_client.get("/approvals")
 
     assert resp.status_code == 200
-    assert "2 awaiting review" in resp.text
+    assert "2 waiting for you" in resp.text
 
 
 def test_index_shows_no_badge_when_nothing_awaiting_review(client, conn):
     test_client, _ = client
     _insert_run(conn, "r1", "applied")
 
-    resp = test_client.get("/")
+    resp = test_client.get("/approvals")
 
     assert resp.status_code == 200
-    assert "awaiting review" not in resp.text
+    assert "0 waiting for you" in resp.text
+    assert 'class="queue-card' not in resp.text

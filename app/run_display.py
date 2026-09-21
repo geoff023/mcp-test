@@ -61,3 +61,18 @@ def full_datetime(ts: str | None, *, seconds: bool = True) -> str:
 
 def clock_time(ts: str | None) -> str:
     return _local(ts).strftime("%H:%M:%S") if ts else ""
+
+
+def ago(ts: str | None, *, now: datetime | None = None) -> str:
+    """"2 min ago" / "3 h ago" / "4 days ago" for the Approvals queue."""
+    if not ts:
+        return ""
+    seconds = int(((now or datetime.now().astimezone()) - _local(ts)).total_seconds())
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{seconds // 60} min ago"
+    if seconds < 86400:
+        return f"{seconds // 3600} h ago"
+    days = seconds // 86400
+    return f"{days} day{'s' if days != 1 else ''} ago"

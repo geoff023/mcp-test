@@ -50,7 +50,8 @@ def test_dashboard_renders_stat_cards_and_charts(client):
     resp = test_client.get("/dashboard")
 
     assert resp.status_code == 200
-    assert "Total issues" in resp.text
+    assert "Unestimated stories" in resp.text
+    assert "Pending approvals" in resp.text
     assert "Story points done" in resp.text
     assert "<svg" in resp.text
     assert "not yet estimated" in resp.text  # suggestion for the one unestimated story

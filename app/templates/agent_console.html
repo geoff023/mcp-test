@@ -1,14 +1,11 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
 {% import "_progress.html" as progress %}
-{% block title %}Agent console - Orbit{% endblock %}
+{% set page_title = "New task" %}
 {% block content %}
-  <div class="page-head">
-    <h1>Agent console</h1>
-  </div>
   <p class="page-subtitle">
-    Defines and runs a task through Gemini instead of a human typing a prompt into Claude
-    Code.
+    Pick a task, choose how much the agents may do, then review what they propose. Nothing
+    reaches Jira until a person approves it.
   </p>
 
   <nav class="stepper" aria-label="Progress">
@@ -33,31 +30,17 @@
         <div class="step-body">
           <span class="step-title">What should the agent do?</span>
           <div class="chip-grid">
-            <label class="chip">
-              <input type="radio" name="task_type_choice" value="reestimate" checked>
-              Effort estimation
-            </label>
-            <label class="chip chip-disabled">
-              <input type="radio" name="task_type_choice" value="weekly_status" disabled>
-              Weekly status report <em>Soon</em>
-            </label>
-            <label class="chip chip-disabled">
-              <input type="radio" name="task_type_choice" value="standup_digest" disabled>
-              Standup / meeting digest <em>Soon</em>
-            </label>
-            <label class="chip chip-disabled">
-              <input type="radio" name="task_type_choice" value="risk_scan" disabled>
-              Risk scan / report <em>Soon</em>
-            </label>
-            <label class="chip chip-disabled">
-              <input type="radio" name="task_type_choice" value="sprint_planning" disabled>
-              Sprint planning <em>Soon</em>
-            </label>
-            <label class="chip chip-disabled">
-              <input type="radio" name="task_type_choice" value="retrospective" disabled>
-              Retrospective synthesis <em>Soon</em>
-            </label>
+            {% for task in task_types %}
+              <label class="chip level-card-{{ task.recommended }} {{ '' if task.available else 'chip-disabled' }}">
+                <input type="radio" name="task_type_choice" value="{{ task.slug }}" {{ "checked" if task.available else "disabled" }}>
+                {{ task.label }}{% if not task.available %} <em>Soon</em>{% endif %}
+              </label>
+            {% endfor %}
           </div>
+          <p class="chip-legend">
+            <span class="lead">Dot = recommended mode:</span>
+            {% for code in ("L1", "L2", "L3", "L4") %}<span class="level-card-{{ code }}">{{ level_name(code) }}</span>{% endfor %}
+          </p>
         </div>
       </div>
 
@@ -122,6 +105,10 @@
           <div class="level-detail-col-title">May not</div>
           <div id="level-detail-may-not-text"></div>
         </div>
+        <dl class="this-run">
+          <dt>Creates</dt><dd id="level-detail-creates"></dd>
+          <dt>Writes to Jira</dt><dd id="level-detail-writes"></dd>
+        </dl>
       </div>
 
       <div class="console-actions">
@@ -163,7 +150,7 @@
     </div>
   </section>
 
-  <section class="console-panel card chat-card" id="step-3-chat" hidden>
+  <section class="console-panel card" id="step-3-chat" hidden>
     <span class="step-title">{{ level_name("L1") }} chat</span>
     <p class="chart-caption">
       {{ level_tagline("L1") }} Ask about issues, estimates, or status &mdash; nothing here can
@@ -218,21 +205,10 @@
         specific: "specific issue(s)",
       };
 
-      // Fixed per-task-type recommendation, not computed or configurable -
-      // higher-risk/higher-blast-radius task types get a lower recommended
-      // autonomy level. reestimate: L2 matches the academic framework's own
-      // worked example for Human-AI Collaborative (see CLAUDE.md section 2).
-      // The rest are inert (their chips are disabled - see "Soon" above)
-      // but the mapping is filled in now so the recommendation is already
-      // correct the moment each task type actually ships.
-      var TASK_RECOMMENDATIONS = {
-        reestimate: "L2",
-        weekly_status: "L3",
-        standup_digest: "L3",
-        risk_scan: "L1",
-        sprint_planning: "L1",
-        retrospective: "L2",
-      };
+      // Recommended level per task type and what each level creates / writes come from
+      // app/levels.py, so this page, Settings and the docs cannot drift apart.
+      var TASK_RECOMMENDATIONS = {{ task_recs|tojson }};
+      var LEVEL_FACTS = {{ level_facts|tojson }};
 
       var current = 1;
 
@@ -259,6 +235,8 @@
         if (!detail) return;
         document.getElementById("level-detail-may-text").textContent = detail.may;
         document.getElementById("level-detail-may-not-text").textContent = detail.mayNot;
+        document.getElementById("level-detail-creates").textContent = LEVEL_FACTS[level].creates;
+        document.getElementById("level-detail-writes").textContent = LEVEL_FACTS[level].writes;
       }
 
       function updateRunSummary() {

@@ -91,9 +91,9 @@
       if (!thread) {
         thread = document.createElement("div");
         thread.className = "chat-thread";
-        var empty = card.querySelector(".empty");
+        var empty = card.querySelector(".chat-empty, .empty");
         if (empty) empty.replaceWith(thread);
-        else card.insertBefore(thread, block);
+        else block.parentElement.insertBefore(thread, block);
       }
       var bubble = document.createElement("div");
       bubble.className = "chat-msg chat-msg-user";
@@ -118,6 +118,15 @@
       block.scrollIntoView({ block: "nearest" });
     });
   }
+
+  /* Suggested prompts: fill the box, the person still presses Send. */
+  document.querySelectorAll("[data-prompt]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var box = document.querySelector(".chat-form textarea");
+      box.value = btn.dataset.prompt;
+      box.focus();
+    });
+  });
 
   document.querySelectorAll(".chat-form").forEach(bindChat);
   window.OrbitProgress = { start: start, fail: fail };

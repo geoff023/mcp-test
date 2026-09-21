@@ -38,7 +38,7 @@ def bar_chart(bars: list[dict], *, width: int = 440, height: int = 220) -> Marku
     if not bars:
         return Markup(f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}"></svg>')
 
-    pad_left, pad_right, pad_top, pad_bottom = 16, 16, 26, 28
+    pad_left, pad_right, pad_top, pad_bottom = 16, 16, 32, 40
     plot_w = width - pad_left - pad_right
     plot_h = height - pad_top - pad_bottom
     max_val = max((b["value"] for b in bars), default=0) or 1
@@ -63,9 +63,9 @@ def bar_chart(bars: list[dict], *, width: int = 440, height: int = 220) -> Marku
             f'<g><title>{_esc(bar["label"])}: {_esc(value)}</title>'
             f'<rect x="{_fmt(x)}" y="{_fmt(y)}" width="{_fmt(bar_w)}" height="{_fmt(bar_h)}" '
             f'rx="4" fill="{bar["color"]}"/>'
-            f'<text x="{_fmt(cx)}" y="{_fmt(y - 8)}" text-anchor="middle" font-size="12" '
+            f'<text x="{_fmt(cx)}" y="{_fmt(y - 8)}" text-anchor="middle" font-size="16" '
             f'font-weight="700" fill="var(--text)">{_esc(value)}</text>'
-            f'<text x="{_fmt(cx)}" y="{_fmt(baseline + 18)}" text-anchor="middle" font-size="11" '
+            f'<text x="{_fmt(cx)}" y="{_fmt(baseline + 26)}" text-anchor="middle" font-size="16" '
             f'fill="var(--text-muted)">{_esc(bar["label"])}</text>'
             f"</g>"
         )
@@ -105,12 +105,12 @@ def donut_chart(
             offset += length
     if center_value:
         parts.append(
-            f'<text x="{cx}" y="{cy - 2}" text-anchor="middle" font-size="22" font-weight="700" '
+            f'<text x="{cx}" y="{cy + 2}" text-anchor="middle" font-size="32" font-weight="700" '
             f'fill="var(--text)">{_esc(center_value)}</text>'
         )
     if center_label:
         parts.append(
-            f'<text x="{cx}" y="{cy + 18}" text-anchor="middle" font-size="11" '
+            f'<text x="{cx}" y="{cy + 26}" text-anchor="middle" font-size="16" '
             f'fill="var(--text-muted)">{_esc(center_label)}</text>'
         )
     parts.append("</svg>")
@@ -124,7 +124,7 @@ def area_chart(points: list[dict], *, width: int = 620, height: int = 220, color
     if not points:
         return Markup(f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}"></svg>')
 
-    pad_left, pad_right, pad_top, pad_bottom = 34, 12, 16, 24
+    pad_left, pad_right, pad_top, pad_bottom = 40, 12, 16, 32
     plot_w = width - pad_left - pad_right
     plot_h = height - pad_top - pad_bottom
     values = [p["value"] for p in points]
@@ -150,7 +150,7 @@ def area_chart(points: list[dict], *, width: int = 620, height: int = 220, color
     for frac in (0.0, 0.5, 1.0):
         y = pad_top + plot_h - frac * plot_h
         parts.append(f'<line x1="{pad_left}" y1="{_fmt(y)}" x2="{width - pad_right}" y2="{_fmt(y)}" stroke="var(--border)" stroke-width="1"/>')
-        parts.append(f'<text x="{pad_left - 6}" y="{_fmt(y + 3)}" text-anchor="end" font-size="10" fill="var(--text-muted)">{_fmt(frac * max_val)}</text>')
+        parts.append(f'<text x="{pad_left - 8}" y="{_fmt(y + 4)}" text-anchor="end" font-size="12" fill="var(--text-muted)">{_fmt(frac * max_val)}</text>')
 
     parts.append(f'<path d="{area_path}" fill="{color}" fill-opacity="0.12" stroke="none"/>')
     parts.append(f'<path d="{line_path}" fill="none" stroke="{color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>')
@@ -159,7 +159,7 @@ def area_chart(points: list[dict], *, width: int = 620, height: int = 220, color
     for i in label_indices:
         x, _ = coords[i]
         parts.append(
-            f'<text x="{_fmt(x)}" y="{height - 6}" text-anchor="middle" font-size="10" '
+            f'<text x="{_fmt(x)}" y="{height - 8}" text-anchor="middle" font-size="12" '
             f'fill="var(--text-muted)">{_esc(points[i]["label"])}</text>'
         )
     last_x, last_y = coords[-1]

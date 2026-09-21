@@ -86,31 +86,39 @@ come later. Never implement a guardrail as a prompt instruction.
 
 ## 3. What's built — the five surfaces
 
-Every page lives under one FastAPI app (`app/main.py`) and shares one nav bar. In the order a
-new user actually needs them:
+Every page lives under one FastAPI app (`app/main.py`) and shares one app shell taken from the v7
+Figma prototype (`FIT4701-Agentic-PM-Prototype-v7.fig`): a left sidebar (project card, nav grouped
+under AGENTS and CONFIGURATION, an Approvals badge counting runs waiting on a human, a Jira site card)
+and a top bar (breadcrumb, page title, Open in Jira). `/` redirects to the Dashboard, the prototype's
+first nav item. The pages:
 
-- **Agent console** (`/agent-console`) — a 3-step wizard: pick a task type (only Effort
+- **New task** (`/agent-console`; the Agent console) — a 3-step wizard: pick a task type (only Effort
   Estimation is real; the rest are visible-but-disabled "soon" chips, each already carrying a
   fixed recommended-autonomy mapping so the mapping is correct the moment it ships) → pick a
   working mode (a "Recommended" badge steers higher-risk task types toward lower autonomy) →
   either a Run confirmation for L2–L4 (submits to the orchestrator, redirects to the run's
   review page) or, for L1, the chat panel embedded directly as step 3 — a read-only level has
   no proposal to review, so the conversation itself is both the run and the review.
-- **Chat** (`/chat`) — the same L1 conversation as the console's embedded step, one shared
+- **Chat** (`/chat`, its own sidebar tab) — the same L1 conversation as the console's embedded step, one shared
   DB-backed session (`_chat_thread.html` is the shared macro), reachable directly.
-- **Runs** (`/`, `/runs/{id}`) — every run, and per run the staged-changes review surface:
+- **Approvals** (`/approvals`, `/runs/{id}`) — runs waiting on a human first (oldest first), then every earlier run, and per run the staged-changes review surface:
   editable at L2, locked at L3, acknowledge-then-issue-token at L4.
 - **Dashboard** (`/dashboard`) — read-only project analytics: stat cards, a status-breakdown
   bar chart, an estimation-coverage donut, a "story points remaining over time" chart
   (explicitly not a sprint burndown — this prototype has no sprint start/end dates), a
   pace-based forecast, and fixed rule-based suggestions (deliberately not LLM-driven — free,
   deterministic, testable).
-- **Audit log** (`/audit`) — the full provenance trail, grouped per run into a native
+- **Activity** (`/audit`; the audit log) — the full provenance trail, with All / Changed Jira / Needs you / Rejected / Advice only filters, grouped per run into a native
   `<details>` disclosure (zero JS) with humanised actor/action labels — see
   `app/audit_display.py` for why `agent:planning` displays as "Human (via Claude Code)", not
   as an AI.
+- **Settings** (`/settings`) — read-only: what each level may do, generated from `TOOLS_BY_LEVEL`
+  (so it cannot drift from what the gateway enforces), the guardrail, and the recommended level per task
+  type. No editable settings, no Memory page: the prototype's Memory, undo window and approval expiry
+  are not built.
 
-All five share one design system (`app/static/style.css`): CSS custom properties for colour
+All share one design system (`app/static/style.css`, tokens from the Figma file: Geologica on a 4px type grid (12/16/20/24/32/40), #f8f8f8 ground,
+16px white cards, charcoal primary buttons, one accent colour per autonomy level): CSS custom properties for colour
 (reused directly as SVG `fill`/`stroke` in `app/charts.py`, so a chart can never drift from a
 pill's colour), a consistent stat-card/chip/level-card vocabulary, and an "agents can make
 mistakes" disclaimer next to any AI-generated content, plus a persistent one in the footer.
@@ -140,7 +148,9 @@ orchestrator/        Callers of the gateway — human-via-Claude-Code and LLM al
 
 app/                Control plane: FastAPI + Jinja2, server-rendered. No SPA framework.
   main.py              All routes.
-  levels.py            LEVEL_DISPLAY — product-facing names (see Section 2).
+  levels.py            LEVEL_DISPLAY (names, taglines, what each level creates/writes), TASK_TYPES (label +
+                        recommended level, shared by New task and Settings), tool labels.
+  run_display.py       Plain-language run fields: friendly_scope(), dates, ago(), humanize().
   analytics.py         build_dashboard_data() — pure aggregation/forecast/suggestions, no Jira call.
   charts.py            Inline-SVG chart builders (bar/donut/area) — no charting library, no build step.
   audit_display.py     friendly_action()/friendly_actor()/group_audit_rows() for the audit log.

@@ -44,3 +44,20 @@ def test_dates_are_the_local_calendar_date_and_the_full_time_on_hover():
     assert short_date(ts) == f"{local.day} {local:%b %Y}"
     assert full_datetime(ts).endswith(local.strftime("%H:%M:%S"))
     assert short_date(None) == "" and full_datetime(None) == ""
+
+
+def test_ago_reads_like_a_person_would_say_it():
+    from datetime import timedelta
+
+    from app.run_display import ago
+
+    now = datetime.fromisoformat("2026-09-22T12:00:00+00:00")
+    def at(delta):
+        return (now - delta).isoformat()
+
+    assert ago(at(timedelta(seconds=20)), now=now) == "just now"
+    assert ago(at(timedelta(minutes=2)), now=now) == "2 min ago"
+    assert ago(at(timedelta(hours=3)), now=now) == "3 h ago"
+    assert ago(at(timedelta(days=1)), now=now) == "1 day ago"
+    assert ago(at(timedelta(days=4)), now=now) == "4 days ago"
+    assert ago(None) == ""

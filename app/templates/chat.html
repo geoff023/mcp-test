@@ -1,32 +1,42 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
 {% import "_progress.html" as progress %}
-{% block title %}{{ level_name("L1") }} chat - Orbit{% endblock %}
+{% set page_title = "Chat" %}
 {% block content %}
-  <div class="page-head">
-    <h1>{{ level_name("L1") }} chat</h1>
-    <span class="level-pill level-L1">{{ level_name("L1") }} <span class="level-code">(L1)</span></span>
-  </div>
-  <p class="page-subtitle">
-    {{ level_tagline("L1") }} Ask about issues, estimates, or status &mdash; the assistant can only
-    read Jira, it structurally has no tool to change anything. Use the
-    <a href="/agent-console">Agent console</a> to actually stage or apply a change.
-  </p>
-  <div class="ai-disclaimer">
-    <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
-    <span>The assistant can make mistakes. Verify anything important against Jira directly.</span>
-  </div>
-
   <div class="card chat-card">
-    {{ chat_thread_macro.chat_thread(messages) }}
+    <div class="chat-head">
+      <span class="level-pill level-L1">{{ level_name("L1") }}</span>
+      <span>{{ level_tagline("L1") }} Nothing is written to Jira &mdash; the assistant can only read it.</span>
+    </div>
 
-    {{ progress.block() }}
+    <div class="chat-body">
+      {% if not messages %}
+        <div class="chat-empty">
+          <h2>What should the agents advise on?</h2>
+          <p>
+            The assistant reads your Jira project and answers here. You decide what to copy into
+            Jira. To stage or apply a change, start a <a href="/agent-console">New task</a>.
+          </p>
+          <div class="prompt-grid">
+            <button type="button" class="prompt" data-prompt="Which stories have no estimate?"><strong>Which stories have no estimate?</strong><span>Lists stories still missing story points</span></button>
+            <button type="button" class="prompt" data-prompt="What is the status of the project?"><strong>What is the status of the project?</strong><span>Issues by status and what is left</span></button>
+            <button type="button" class="prompt" data-prompt="Which issues are overdue?"><strong>Which issues are overdue?</strong><span>Uses due dates on open issues</span></button>
+            <button type="button" class="prompt" data-prompt="Which stories are done?"><strong>Which stories are done?</strong><span>Recently completed work</span></button>
+          </div>
+        </div>
+      {% else %}
+        {{ chat_thread_macro.chat_thread(messages) }}
+      {% endif %}
+
+      {{ progress.block() }}
+    </div>
 
     <form method="post" action="/chat" class="chat-form">
-      <textarea name="message" placeholder="Ask about your Jira project..." required></textarea>
+      <textarea name="message" placeholder="Ask about your Jira project&hellip;" aria-label="Your question" required></textarea>
       <input type="hidden" name="redirect_to" value="/chat">
       <button type="submit" class="approve run-btn">Send</button>
     </form>
+    <p class="chat-note">The assistant can make mistakes. Check details in Jira before you act on them.</p>
   </div>
   <script src="/static/progress.js?v={{ script_version() }}"></script>
 {% endblock %}
