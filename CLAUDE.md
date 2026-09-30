@@ -93,8 +93,10 @@ account; short version: **M1 Co-Pilot** (chat, Consult/Execute sub-modes), **M2 
 L3), **M3 Auto-Pilot** (a rule you authorise once, still gated by a token before anything writes —
 was L4). The L1–L4 codes, `TOOLS_BY_LEVEL`, and every tool-layer enforcement are **unchanged** —
 this only reshaped the front door onto them. `mode_name()`/`mode_code()` do the L-code → mode
-display mapping everywhere except Settings, which deliberately still shows the true L1–L4 rows
-(see its own note in `app/levels.py`).
+display mapping everywhere, including Settings now: its Agent permissions table is one row per
+mode (M1/M2/M3), not one per L-code — L3 stood in as its own row until a UI pass showed that,
+being tool-identical to L2, it just repeated L2's row under the same "Super-Pilot" name and read
+as a bug. L2 represents both in that table now (see `show_settings()`'s docstring).
 
 Every page lives under one FastAPI app (`app/main.py`) and shares one app shell taken from the v7
 Figma prototype (`FIT4701-Agentic-PM-Prototype-v7.fig`): a left sidebar (project card, nav grouped
@@ -102,19 +104,22 @@ under AGENTS and CONFIGURATION, an Approvals badge counting runs waiting on a hu
 and a top bar (breadcrumb, page title, Open in Jira). `/` redirects to the Dashboard, the prototype's
 first nav item. The pages:
 
-- **Co-Pilot** (`/chat`) — Consult sub-mode: the L1 chat surface, one shared DB-backed session
-  (`_chat_thread.html` is the shared macro). Execute sub-mode is a link, not a rebuild: it hands off
-  to Super-Pilot's own flow (see the M1 "reskin, don't rebuild" decision in the same commit).
+- **Co-Pilot** (`/chat`) — the L1 chat surface, one shared DB-backed session (`_chat_thread.html`
+  is the shared macro). The Consult/Execute sub-mode toggle was removed - Co-Pilot is Consult only
+  now; an inline link still points to Super-Pilot for anyone who wants to stage or apply a change.
 - **Super-Pilot** (`/agent-console`) — a 2-step wizard: pick a task type (only Effort Estimation is
   real; the rest are visible-but-disabled "soon" chips) and scope, then review and run. Always
   dispatches at L2. Its review page is editable, one Approve click writes it.
 - **Auto-Pilot** (`/autopilot`) — its own page, not a mode on Super-Pilot's wizard: two tabs,
   Active automations (default) and Configure. Configure only *feels* like creating a saved rule —
   "Create automation" just builds a card client-side and switches tabs; nothing persists, there is
-  no automations table this milestone, and reloading the page resets everything back to the one
-  seeded demo card. The toggle switch and Delete button on a card are the same: cosmetic, JS-only.
-  The one real thing on the page is a card's **Run now** button — it POSTs to the same tested
-  `/agent-console/start` path Super-Pilot uses, at level=L4. From there the flow is real: the run
+  no automations table this milestone, and reloading the page resets everything back to the seven
+  seeded demo cards (`_seeded_automations()` in `app/main.py` — one per task type plus a forecast-
+  watch card tied to the dashboard's pace forecast). Only the effort-estimation card is real and
+  toggled on by default; the rest are placeholder data for task types that aren't built, with Run
+  now disabled on each. The toggle switch and Delete button on every card are the same: cosmetic,
+  JS-only. The one real thing on the page is the effort-estimation card's **Run now** button — it
+  POSTs to the same tested `/agent-console/start` path Super-Pilot uses, at level=L4. From there the flow is real: the run
   lands on `/runs/{id}` awaiting review, Authorize acknowledges the whole batch (no per-item
   review, no write), then a separate Approve click writes it to Jira — same human-triggered
   `apply_staged_changes` call every other level's Approve uses, not the agent calling

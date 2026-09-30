@@ -6,45 +6,54 @@
 
   <nav class="mode-tabs" aria-label="Auto-Pilot views">
     <button type="button" class="mode-tab active" data-tab-btn="automations">
-      Active automations <span class="tab-count" id="automation-count">1</span>
+      Active automations <span class="tab-count" id="automation-count">{{ seeded_automations|length }}</span>
     </button>
     <button type="button" class="mode-tab" data-tab-btn="configure">Configure</button>
   </nav>
 
   <section id="tab-automations">
     <p class="chart-caption">
-      Only <strong>Run now</strong> below is real &mdash; it starts the same tested L4 run Super-Pilot
-      uses at L2. The toggle, delete, and the automation itself are demo chrome: nothing here is
-      saved, and reloading this page resets it. There is no automations table in this milestone.
+      Only <strong>Run now</strong> on the effort-estimation automation is real &mdash; it starts the
+      same tested L4 run Super-Pilot uses at L2. Everything else below is placeholder data showing
+      what a fuller automation list would look like once those task types are built &mdash; their Run
+      now is disabled rather than pretend to trigger work the orchestrator can't do yet. Nothing on
+      this page is saved; reloading it resets everything. There is no automations table this milestone.
     </p>
 
     <div class="automation-list" id="automation-list">
-      <div class="automation-card" data-task-type="reestimate" data-scope="unestimated">
-        <div class="automation-head">
-          <div>
-            <span class="automation-name">Update tasks with no story points</span>
-            <p class="automation-rule">Automatically update all tasks with no story points</p>
+      {% for a in seeded_automations %}
+        <div class="automation-card level-card-L4 {{ '' if a.active else 'is-off' }} {{ '' if a.available else 'is-placeholder' }}"
+             data-task-type="{{ a.slug }}" data-scope="{{ a.scope_value }}" data-available="{{ 'true' if a.available else 'false' }}">
+          <div class="automation-head">
+            <div>
+              <div class="automation-title">
+                <span class="automation-name">{{ a.name }}</span>
+                {% if not a.available %}<span class="tool">Not built yet</span>{% endif %}
+              </div>
+              <p class="automation-rule">{{ a.rule }}</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" class="automation-toggle" {{ "checked" if a.active }}>
+              <span class="switch-track"></span>
+            </label>
           </div>
-          <label class="switch">
-            <input type="checkbox" class="automation-toggle" checked>
-            <span class="switch-track"></span>
-          </label>
-        </div>
-        <dl class="automation-detail-grid">
-          <dt>Task</dt><dd>Effort estimation</dd>
-          <dt>Scope</dt><dd>Stories with no estimate yet</dd>
-          <dt>Mode</dt><dd><span class="level-pill level-L4">{{ mode_name("L4") }}</span></dd>
-          <dt>Created</dt><dd>3 days ago</dd>
-          <dt>Last triggered</dt><dd class="muted">Never run yet</dd>
-        </dl>
-        <div class="automation-foot">
-          <span class="automation-status">Active</span>
-          <div class="automation-foot-actions">
-            <button type="button" class="btn-secondary small automation-delete">Delete</button>
-            <button type="button" class="approve small automation-run">Run now</button>
+          <dl class="automation-detail-grid">
+            <dt>Task</dt><dd>{{ a.task_label }}</dd>
+            <dt>Scope</dt><dd>{{ a.scope_label }}</dd>
+            <dt>Mode</dt><dd><span class="level-pill level-L4">{{ mode_name("L4") }}</span></dd>
+            <dt>Created</dt><dd>{{ a.created }}</dd>
+            <dt>Last triggered</dt><dd class="muted">Never run yet</dd>
+          </dl>
+          <div class="automation-foot">
+            <span class="automation-status">{{ "Active" if a.active else "Paused" }}</span>
+            <div class="automation-foot-actions">
+              {% if not a.available %}<span class="automation-placeholder-note">Not built yet</span>{% endif %}
+              <button type="button" class="btn-secondary small automation-delete">Delete</button>
+              <button type="button" class="approve small automation-run" {{ "disabled" if not (a.active and a.available) }}>Run now</button>
+            </div>
           </div>
         </div>
-      </div>
+      {% endfor %}
     </div>
 
     <p class="empty" id="automation-empty" hidden>No automations yet &mdash; configure one to see it here.</p>
@@ -171,7 +180,7 @@
         toggle.addEventListener("change", function () {
           card.classList.toggle("is-off", !toggle.checked);
           status.textContent = toggle.checked ? "Active" : "Paused";
-          runBtn.disabled = !toggle.checked;
+          runBtn.disabled = !toggle.checked || card.dataset.available === "false";
         });
         card.querySelector(".automation-delete").addEventListener("click", function () {
           card.remove();
@@ -188,12 +197,13 @@
         if (!taskType) return;
 
         var card = document.createElement("div");
-        card.className = "automation-card";
+        card.className = "automation-card level-card-L4";
         card.dataset.taskType = taskType.value;
         card.dataset.scope = scope ? scope.value : "unestimated";
+        card.dataset.available = "true";
         card.innerHTML =
           '<div class="automation-head">' +
-            '<div><span class="automation-name">' + ruleName + '</span>' +
+            '<div><div class="automation-title"><span class="automation-name">' + ruleName + '</span></div>' +
             '<p class="automation-rule">' + ruleName + '</p></div>' +
             '<label class="switch"><input type="checkbox" class="automation-toggle" checked><span class="switch-track"></span></label>' +
           '</div>' +

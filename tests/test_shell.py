@@ -207,14 +207,28 @@ def test_autopilot_page_has_configure_and_active_automations_tabs(client):
 def test_autopilot_seeded_automation_has_a_real_run_now_action(client):
     """The toggle/delete/automation-card chrome is client-side only (no
     automations table exists), but Run now must still POST to the same
-    tested /agent-console/start path Super-Pilot uses - that part is real."""
+    tested /agent-console/start path Super-Pilot uses - that part is real
+    for the reestimate automation. The rest of the default list is
+    placeholder data (see _seeded_automations) with Run now disabled."""
     test_client, _ = client
 
     html = test_client.get("/autopilot").text
 
-    assert 'class="automation-card" data-task-type="reestimate" data-scope="unestimated"' in html
+    assert 'data-task-type="reestimate" data-scope="unestimated" data-available="true"' in html
     assert "Run now" in html
     assert "/agent-console/start" in html
+    assert "Not built yet" in html  # at least one placeholder automation
+
+
+def test_autopilot_placeholder_automations_have_run_now_disabled(client):
+    test_client, _ = client
+
+    html = test_client.get("/autopilot").text
+
+    assert 'data-task-type="forecast_watch"' in html
+    card_html = html[html.index('data-task-type="forecast_watch"'):]
+    run_btn = card_html[card_html.index('automation-run'):card_html.index('automation-run') + 60]
+    assert "disabled" in run_btn
 
 
 def test_approvals_card_has_a_quick_reject_that_redirects_back_to_the_list(client, conn):

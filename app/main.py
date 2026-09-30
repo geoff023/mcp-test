@@ -209,16 +209,68 @@ def agent_console(request: Request, scope: str = "unestimated"):
     )
 
 
+_AUTOMATION_RULES = {
+    "reestimate": "Automatically update all tasks with no story points",
+    "weekly_status": "Automatically post a weekly status report every Friday",
+    "standup_digest": "Automatically summarise standup activity each morning",
+    "risk_scan": "Automatically flag new risk signals across the backlog",
+    "sprint_planning": "Automatically propose next sprint's scope from velocity",
+    "retrospective": "Automatically draft a retrospective summary at sprint close",
+}
+_AUTOMATION_CREATED = ["3 days ago", "6 days ago", "1 week ago", "2 weeks ago", "3 weeks ago", "1 month ago"]
+
+
+def _seeded_automations() -> list[dict]:
+    """Auto-Pilot's default automation list. Only the reestimate one is
+    real - its Run now button POSTs to the same tested /agent-console/start
+    path Super-Pilot uses at L2 (see autopilot.html). Everything else here
+    is placeholder data illustrating what a fuller automation list would
+    look like once those task types are built; their Run now buttons stay
+    disabled rather than pretend to trigger a task the orchestrator can't
+    actually run yet. The forecast automation isn't a task type at all -
+    it's the dashboard's own pace-based forecast, shown here as what
+    watching that forecast automatically would look like.
+    """
+    automations = [
+        {
+            "slug": t["slug"],
+            "name": t["label"],
+            "rule": _AUTOMATION_RULES[t["slug"]],
+            "task_label": t["label"],
+            "scope_label": "Stories with no estimate yet" if t["slug"] == "reestimate" else "Whole project",
+            "scope_value": "unestimated" if t["slug"] == "reestimate" else "all",
+            "available": t["available"],
+            "created": _AUTOMATION_CREATED[i % len(_AUTOMATION_CREATED)],
+            "active": t["available"],
+        }
+        for i, t in enumerate(TASK_TYPES)
+    ]
+    automations.append(
+        {
+            "slug": "forecast_watch",
+            "name": "Forecast pace risk",
+            "rule": "Automatically flag when pace falls behind the forecast",
+            "task_label": "Forecast watch",
+            "scope_label": "Whole project",
+            "scope_value": "all",
+            "available": False,
+            "created": "4 days ago",
+            "active": False,
+        }
+    )
+    return automations
+
+
 @app.get("/autopilot")
 def autopilot(request: Request):
     """Auto-Pilot's (M3) front door: its own page, not a mode toggle on
     Super-Pilot's wizard - see the "configure vs active automations"
-    split in autopilot.html. Only the Configure tab's "Run now" action is
-    real (POSTs to /agent-console/start at level=L4, the same tested path
-    Super-Pilot uses at L2); the Active-automations list (toggle, delete,
-    the demo row itself) is client-side only, nothing persisted - there is
-    no automations table in this milestone. Say so on the page rather than
-    imply otherwise.
+    split in autopilot.html. Only a real (available) automation's "Run
+    now" action does anything (POSTs to /agent-console/start at level=L4,
+    the same tested path Super-Pilot uses at L2); the Active-automations
+    list itself - toggle, delete, every seeded row - is client-side only,
+    nothing persisted, no automations table this milestone. Say so on the
+    page rather than imply otherwise.
     """
     return templates.TemplateResponse(
         request,
@@ -227,6 +279,7 @@ def autopilot(request: Request):
             "default_scope": "unestimated",
             "task_types": TASK_TYPES,
             "level_facts": LEVEL_DISPLAY["L4"],
+            "seeded_automations": _seeded_automations(),
         },
     )
 
