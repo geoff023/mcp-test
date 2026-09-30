@@ -115,20 +115,21 @@ def test_activity_filters_narrow_the_list_and_ignore_unknown_values(client):
     assert "Answered a question" in bogus and "Finished staging" in bogus
 
 
-def test_settings_shows_exactly_the_tools_the_gateway_gives_each_level(client):
-    """Read straight from TOOLS_BY_LEVEL: Consultant has no write tools at all,
-    only Super-Pilot can apply changes to Jira."""
+def test_settings_shows_exactly_the_tools_the_gateway_gives_each_mode(client):
+    """Read straight from TOOLS_BY_LEVEL: Co-Pilot has no write tools at all,
+    only Auto-Pilot can apply changes to Jira. One row per product mode
+    (M1/M2/M3) - L3 tool-identical to L2, so it isn't a separate row here
+    (see show_settings's docstring)."""
     from gateway.server import TOOLS_BY_LEVEL
 
     test_client, _ = client
     html = test_client.get("/settings").text
-    rows = html.split("<tbody>")[1].split("</tbody>")[0].split("<tr>")[1:5]  # the four mode rows
+    rows = html.split("<tbody>")[1].split("</tbody>")[0].split("<tr>")[1:4]  # the three mode rows
 
-    consultant, coworker, committer, superpilot = rows
-    assert "Propose an estimate" not in consultant and "Apply changes to Jira" not in consultant
-    assert "Propose an estimate" in coworker and "Apply changes to Jira" not in coworker
-    assert "Apply changes to Jira" not in committer
-    assert "Apply changes to Jira" in superpilot
+    copilot, superpilot, autopilot = rows
+    assert "Propose an estimate" not in copilot and "Apply changes to Jira" not in copilot
+    assert "Propose an estimate" in superpilot and "Apply changes to Jira" not in superpilot
+    assert "Apply changes to Jira" in autopilot
     assert "commit_changes" in TOOLS_BY_LEVEL["L4"] and "commit_changes" not in TOOLS_BY_LEVEL["L3"]
     assert "Milestone due dates" in html
 
@@ -160,5 +161,107 @@ def test_dashboard_agent_runs_card_splits_runs_by_mode(client, jira_with_spy):
 
     html = test_client.get("/dashboard").text
 
-    assert "Co-worker 2" in html and "Super-Pilot 1" in html
-    assert "Across 1 autonomy level" in html
+    assert "Super-Pilot 2" in html and "Auto-Pilot 1" in html
+    assert "Across 1 mode" in html
+
+
+def test_dashboard_agent_runs_card_merges_l2_and_l3_into_one_super_pilot_bucket(client, jira_with_spy):
+    """M2 (Super-Pilot) display-merges L2 and L3 - see app/levels.py's
+    module docstring - so a mix of the two sums into one bucket, not two."""
+    test_client, conn = client
+    _, spy = jira_with_spy
+    spy.request.return_value.raise_for_status.return_value = None
+    spy.request.return_value.json.return_value = {"issues": []}
+    _insert_run(conn, "a", "applied", level="L2")
+    _insert_run(conn, "b", "applied", level="L3")
+
+    html = test_client.get("/dashboard").text
+
+    assert "Super-Pilot 2" in html
+    assert "Committer" not in html and "Co-worker" not in html
+
+
+def test_sidebar_has_the_three_mode_entry_points(client):
+    """Super-Pilot and Auto-Pilot are separate pages again - Auto-Pilot's
+    own configure/active-automations split (autopilot.html) doesn't fit
+    as a dropdown on Super-Pilot's wizard."""
+    test_client, _ = client
+
+    html = test_client.get("/approvals").text
+
+    assert "Co-Pilot" in html and "Super-Pilot" in html and "Auto-Pilot" in html
+    assert 'href="/agent-console"' in html
+    assert 'href="/autopilot"' in html
+
+
+def test_autopilot_page_has_configure_and_active_automations_tabs(client):
+    test_client, _ = client
+
+    html = test_client.get("/autopilot").text
+
+    assert 'data-tab-btn="automations"' in html
+    assert 'data-tab-btn="configure"' in html
+    assert "Automatically update all tasks with no story points" in html
+
+
+def test_autopilot_seeded_automation_has_a_real_run_now_action(client):
+    """The toggle/delete/automation-card chrome is client-side only (no
+    automations table exists), but Run now must still POST to the same
+    tested /agent-console/start path Super-Pilot uses - that part is real."""
+    test_client, _ = client
+
+    html = test_client.get("/autopilot").text
+
+    assert 'class="automation-card" data-task-type="reestimate" data-scope="unestimated"' in html
+    assert "Run now" in html
+    assert "/agent-console/start" in html
+
+
+def test_approvals_card_has_a_quick_reject_that_redirects_back_to_the_list(client, conn):
+    test_client, _ = client
+    _insert_run(conn, "r1", "awaiting_review")
+
+    html = test_client.get("/approvals").text
+    assert 'action="/runs/r1/reject"' in html
+    assert 'name="redirect_to" value="/approvals"' in html
+
+    resp = test_client.post("/runs/r1/reject", data={"redirect_to": "/approvals"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/approvals"
+    assert conn.execute("SELECT status FROM runs WHERE id = 'r1'").fetchone()[0] == "rejected"
+
+
+def test_quick_reject_removes_the_run_from_approvals_and_logs_to_activity(client, conn):
+    test_client, _ = client
+    _insert_run(conn, "r1", "awaiting_review")
+
+    test_client.post("/runs/r1/reject", data={"redirect_to": "/approvals"})
+
+    approvals_html = test_client.get("/approvals").text
+    assert "0 waiting for you" in approvals_html
+    assert 'href="/runs/r1"' not in approvals_html.split("Earlier runs")[0]
+
+    activity_html = test_client.get("/audit").text
+    assert "Sent back" in activity_html
+
+
+def test_reject_without_redirect_to_still_lands_on_the_run_page(client, conn):
+    """The run page's own Send back form doesn't set redirect_to - must keep
+    working exactly as before this button was added."""
+    test_client, _ = client
+    _insert_run(conn, "r1", "awaiting_review")
+
+    resp = test_client.post("/runs/r1/reject", data={"comment": "not now"}, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/runs/r1"
+
+
+def test_reject_ignores_an_unrecognised_redirect_to(client, conn):
+    test_client, _ = client
+    _insert_run(conn, "r1", "awaiting_review")
+
+    resp = test_client.post("/runs/r1/reject", data={"redirect_to": "https://evil.example/"}, follow_redirects=False)
+
+    assert resp.headers["location"] == "/runs/r1"

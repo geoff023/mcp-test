@@ -2,10 +2,14 @@
 no build step (see CLAUDE.md section 4).
 
 Approving or rejecting a run happens directly in this process, not through
-the MCP gateway - at L3 the agent has no commit_changes tool at all, so a
-human acting through this app is the only way a staged change ever
-reaches Jira. Approve still issues and consumes an approval_tokens row,
-for audit parity with the L4 path.
+the MCP gateway - a human clicking Approve in this app is what actually
+writes to Jira, at every level including L4. L4 additionally requires the
+batch to be authorised first (/runs/{run_id}/authorize acknowledges every
+staged change at once); Approve refuses until that's done. Approve still
+issues and consumes an approval_tokens row for every level, for audit
+trail parity - the agent's own commit_changes tool (gateway/server.py)
+remains available for anyone driving a run by hand instead of through
+this app, but the product UI never depends on it.
 """
 
 from __future__ import annotations
@@ -38,7 +42,18 @@ from app.audit_display import (
 )
 from app.charts import area_chart, bar_chart, donut_chart
 from app.chat_markdown import render_chat_markdown
-from app.levels import LEVEL_DISPLAY, READ_TOOLS, TASK_TYPES, level_name, level_tagline, tool_label
+from app.levels import (
+    LEVEL_DISPLAY,
+    MODES,
+    READ_TOOLS,
+    TASK_TYPES,
+    level_name,
+    level_tagline,
+    mode_code,
+    mode_name,
+    mode_tagline,
+    tool_label,
+)
 from db.audit import log_audit
 from db.migrate import get_connection
 from gateway.apply import apply_staged_changes
@@ -59,6 +74,9 @@ app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="stati
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 templates.env.globals["level_name"] = level_name
 templates.env.globals["level_tagline"] = level_tagline
+templates.env.globals["mode_name"] = mode_name
+templates.env.globals["mode_tagline"] = mode_tagline
+templates.env.globals["MODES"] = MODES
 templates.env.globals["render_chat_markdown"] = render_chat_markdown
 templates.env.globals["friendly_action"] = friendly_action
 templates.env.globals["friendly_actor"] = friendly_actor
@@ -171,35 +189,44 @@ def list_runs(request: Request):
 
 
 @app.get("/agent-console")
-def agent_console(request: Request, scope: str = "unestimated", level: str = "L3"):
-    """`scope` pre-selects the "which issues?" radio - e.g. the dashboard's
-    "N stories not yet estimated" suggestion links straight to
-    ?scope=unestimated so a human doesn't have to make that choice by hand
-    after already being told what needs doing. `level` pre-selects the
-    working-mode step and, for L1, which panel the wizard opens on -
-    POST /chat's redirect_to sends a human back here with ?level=L1 after
-    sending a message, so the console reopens on the chat step instead of
-    resetting to step 1.
+def agent_console(request: Request, scope: str = "unestimated"):
+    """Super-Pilot's (M2) front door. `scope` pre-selects the "which issues?"
+    radio - e.g. the dashboard's "N stories not yet estimated" suggestion
+    links straight to ?scope=unestimated so a human doesn't have to make
+    that choice by hand after already being told what needs doing.
 
-    Always loads the L1 chat thread (not just when level=L1) so the
-    embedded chat step (see agent_console.html) has something to render
-    the moment a human switches to it, without a second request.
+    Every run started here dispatches at L2 - Co-Pilot (L1) lives entirely
+    at /chat, and Auto-Pilot (L4) has its own page at /autopilot.
     """
-    with _lock:
-        session_id = _get_or_create_chat_session()
-        messages = _conn.execute(
-            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id", (session_id,)
-        ).fetchall()
     return templates.TemplateResponse(
         request,
         "agent_console.html",
         {
             "default_scope": scope,
-            "default_level": level,
-            "chat_messages": messages,
             "task_types": TASK_TYPES,
-            "task_recs": {task["slug"]: task["recommended"] for task in TASK_TYPES},
             "level_facts": {code: {"creates": d["creates"], "writes": d["writes"]} for code, d in LEVEL_DISPLAY.items()},
+        },
+    )
+
+
+@app.get("/autopilot")
+def autopilot(request: Request):
+    """Auto-Pilot's (M3) front door: its own page, not a mode toggle on
+    Super-Pilot's wizard - see the "configure vs active automations"
+    split in autopilot.html. Only the Configure tab's "Run now" action is
+    real (POSTs to /agent-console/start at level=L4, the same tested path
+    Super-Pilot uses at L2); the Active-automations list (toggle, delete,
+    the demo row itself) is client-side only, nothing persisted - there is
+    no automations table in this milestone. Say so on the page rather than
+    imply otherwise.
+    """
+    return templates.TemplateResponse(
+        request,
+        "autopilot.html",
+        {
+            "default_scope": "unestimated",
+            "task_types": TASK_TYPES,
+            "level_facts": LEVEL_DISPLAY["L4"],
         },
     )
 
@@ -237,13 +264,12 @@ async def agent_console_run(
 
     L1 can't drive this task type at all - it has no start_run tool
     (TOOLS_BY_LEVEL in gateway/server.py) - so it never reaches the
-    orchestrator here; the wizard's own JS shows the embedded chat step
-    instead of submitting this form when L1 is selected (see
-    agent_console.html), this is the same guard server-side for anyone
-    who posts here directly or has JS disabled.
+    orchestrator here. The wizard itself no longer offers L1 (Co-Pilot
+    lives entirely at /chat - see app/levels.py's module docstring), so
+    this only guards anyone who posts here directly with level=L1.
     """
     if level == "L1":
-        return RedirectResponse(url="/agent-console?level=L1", status_code=303)
+        return RedirectResponse(url="/chat", status_code=303)
     try:
         target_jql = _build_target_jql(scope, specific_issues)
     except ValueError as exc:
@@ -290,7 +316,7 @@ def job_status(job_id: str):
     return job.to_json()
 
 
-def _status_note(run: sqlite3.Row, active_token: sqlite3.Row | None) -> str:
+def _status_note(run: sqlite3.Row, active_token: sqlite3.Row | None, all_acknowledged: bool) -> str:
     """A short, plain-language line about what this run's status actually
     means and what (if anything) happens next. The review flow - what's
     reached Jira and what hasn't - is the part a first-time user gets lost
@@ -307,11 +333,12 @@ def _status_note(run: sqlite3.Row, active_token: sqlite3.Row | None) -> str:
         if run["level"] != "L4":
             return "Nothing has reached Jira yet - review what's below, then Approve or send it back."
         if active_token is not None:
+            # Only reachable via the manual /issue-token API path - the UI's own
+            # authorise-then-approve flow never issues a token itself.
             return "A token has been issued - Jira updates once the agent spends it, not before."
-        return (
-            "Nothing has reached Jira yet - acknowledge each change below, "
-            "then issue a token for the agent to spend."
-        )
+        if all_acknowledged:
+            return "Batch authorised - click Approve to write it to Jira."
+        return "Nothing has reached Jira yet - authorise the batch below, then Approve to write it to Jira."
     return ""
 
 
@@ -325,13 +352,12 @@ def show_run(request: Request, run_id: str):
             "SELECT * FROM staged_changes WHERE run_id = ? ORDER BY issue_key", (run_id,)
         ).fetchall()
 
-        # L4 has no direct approve - a token has to be issued (only once every
-        # staged change is acknowledged) and then consumed by the agent's own
-        # commit_changes call. Work out what state that handoff is in so the
-        # template can show either the acknowledge/issue-token controls or the
-        # issued token itself.
+        # L4 has no direct approve - a token has to be issued (via /authorize,
+        # which acknowledges the whole batch and issues it in one step) and
+        # then consumed by the agent's own commit_changes call. Work out
+        # whether that token is out yet so the template can show either the
+        # Authorize button or the issued token itself.
         active_token = None
-        all_acknowledged = False
         if run["level"] == "L4":
             active_token = _conn.execute(
                 "SELECT token, expires_at FROM approval_tokens "
@@ -342,8 +368,8 @@ def show_run(request: Request, run_id: str):
                 expires_at = datetime.fromisoformat(active_token["expires_at"])
                 if expires_at < datetime.now(timezone.utc):
                     active_token = None  # expired - treat as if none was issued
-            pending = [c for c in changes if c["applied_at"] is None]
-            all_acknowledged = bool(pending) and all(c["acknowledged"] for c in pending)
+
+    all_acknowledged = bool(changes) and all(c["acknowledged"] for c in changes)
 
     rows = []
     for change in changes:
@@ -370,13 +396,19 @@ def show_run(request: Request, run_id: str):
             "rows": rows,
             "active_token": active_token,
             "all_acknowledged": all_acknowledged,
-            "status_note": _status_note(run, active_token),
+            "status_note": _status_note(run, active_token, all_acknowledged),
         },
     )
 
 
 @app.post("/runs/{run_id}/approve")
 async def approve_run(request: Request, run_id: str):
+    """Writes every staged change straight to Jira, for every level -
+    including L4, whose batch must already be authorised (see
+    /runs/{run_id}/authorize) before this is allowed. The agent's own
+    commit_changes tool (gateway/server.py) stays available for anyone
+    driving a run by hand instead of through this app, but the product UI
+    never waits on it - a human clicking Approve is what actually writes."""
     with _lock:
         run = _conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         if run is None:
@@ -384,10 +416,19 @@ async def approve_run(request: Request, run_id: str):
         if run["status"] != "awaiting_review":
             raise HTTPException(status_code=400, detail=f"run is {run['status']}, not awaiting_review")
         if run["level"] == "L4":
-            raise HTTPException(
-                status_code=400,
-                detail="L4 runs are approved via /issue-token and the agent's commit_changes call, not /approve",
-            )
+            total, unacknowledged = _conn.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN acknowledged = 0 THEN 1 ELSE 0 END) "
+                "FROM staged_changes WHERE run_id = ? AND applied_at IS NULL",
+                (run_id,),
+            ).fetchone()
+            if not total:
+                raise HTTPException(status_code=400, detail="no staged changes to approve")
+            if unacknowledged:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{unacknowledged} of {total} staged change(s) not yet authorised - "
+                    "authorise the batch first",
+                )
 
         if run["level"] == "L2":
             # The review page posted one value_<change_id> field per row -
@@ -511,8 +552,55 @@ def issue_token(run_id: str):
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 
 
+@app.post("/runs/{run_id}/authorize")
+def authorize_run(run_id: str):
+    """Auto-Pilot's first click: marks every staged change on the run
+    acknowledged at once, instead of one at a time. Applies nothing and
+    issues no token - it only unlocks the Approve button on this run's page
+    (see approve_run), which is the second click and the one that actually
+    writes to Jira. /changes/{id}/acknowledge still exists underneath for
+    anyone driving a run by hand (e.g. via Claude Code, see CLAUDE.md).
+    """
+    with _lock:
+        run = _conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        if run["level"] != "L4":
+            raise HTTPException(status_code=400, detail="authorize is only for L4 runs")
+        if run["status"] != "awaiting_review":
+            raise HTTPException(status_code=400, detail=f"run is {run['status']}, not awaiting_review")
+
+        (total,) = _conn.execute(
+            "SELECT COUNT(*) FROM staged_changes WHERE run_id = ? AND applied_at IS NULL", (run_id,)
+        ).fetchone()
+        if not total:
+            raise HTTPException(status_code=400, detail="no staged changes to authorize")
+
+        _conn.execute(
+            "UPDATE staged_changes SET acknowledged = 1 WHERE run_id = ? AND applied_at IS NULL", (run_id,)
+        )
+        _conn.commit()
+
+        log_audit(
+            _conn,
+            run_id=run_id,
+            actor=HUMAN_ACTOR,
+            level=run["level"],
+            action="authorize",
+            outcome="acknowledged",
+            detail=f"{total} change(s) authorised",
+        )
+    return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
+
+
 @app.post("/runs/{run_id}/reject")
-def reject_run(run_id: str, comment: str = Form(default="")):
+def reject_run(run_id: str, comment: str = Form(default=""), redirect_to: str = Form(default="")):
+    """Rejecting takes a run out of the Approvals queue (its status stops
+    being 'awaiting_review') and logs the decision to Activity - nothing
+    reached Jira, so there is nothing to undo there. `redirect_to` lets the
+    Approvals queue's own quick-reject button send the human back to the
+    list it just changed, instead of always landing on the run page - same
+    allowlisted-target pattern as POST /chat's redirect_to."""
     with _lock:
         run = _conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         if run is None:
@@ -530,7 +618,8 @@ def reject_run(run_id: str, comment: str = Form(default="")):
             outcome="rejected",
             detail=comment or None,
         )
-    return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
+    target = "/approvals" if redirect_to == "/approvals" else f"/runs/{run_id}"
+    return RedirectResponse(url=target, status_code=303)
 
 
 @app.get("/audit")
@@ -554,17 +643,31 @@ def show_audit(request: Request, show: str = "all"):
 
 @app.get("/settings")
 def show_settings(request: Request):
-    """Read-only: what each autonomy level may do, straight from the tool table
-    the gateway enforces (TOOLS_BY_LEVEL) - not a copy that could drift."""
-    levels = [
+    """Read-only: what each product mode may do, straight from the tool table
+    the gateway enforces (TOOLS_BY_LEVEL) - not a copy that could drift.
+
+    One row per mode (M1 Co-Pilot, M2 Super-Pilot, M3 Auto-Pilot), not per
+    L-code - L3 is tool-identical to L2 (same TOOLS_BY_LEVEL entries, only
+    the UI-enforced locked-vs-editable review differs), so a separate L3
+    row would just repeat L2's row under the same "Super-Pilot" name and
+    look like a bug. L2 stands in for both here.
+    """
+    modes = [
         {
             "code": code,
-            **LEVEL_DISPLAY[code],
+            "mode": mode_name(code),
+            "tagline": mode_tagline(code),
+            "creates": LEVEL_DISPLAY[code]["creates"],
+            "writes": LEVEL_DISPLAY[code]["writes"],
             "tools": [{"label": tool_label(t), "write": t not in READ_TOOLS} for t in TOOLS_BY_LEVEL[code]],
         }
-        for code in ("L1", "L2", "L3", "L4")
+        for code in ("L1", "L2", "L4")
     ]
-    return templates.TemplateResponse(request, "settings.html", {"levels": levels, "task_types": TASK_TYPES})
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"modes": modes, "task_types": TASK_TYPES, "token_ttl_minutes": TOKEN_TTL_MINUTES},
+    )
 
 
 _STATUS_CATEGORY_COLORS = ("var(--viz-todo)", "var(--viz-doing)", "var(--viz-done)")
@@ -583,17 +686,33 @@ def show_dashboard(request: Request):
         rows = _jira.search_issues_for_analytics(jql)
     except Exception as exc:  # noqa: BLE001 - the landing page must still load without Jira
         print(f"dashboard: Jira unreachable: {exc!r}", file=sys.stderr)
-        rows, jira_error = [], "Couldn't reach Jira, so project numbers are empty. Runs and approvals below still come from Orbit."
+        rows, jira_error = [], "Couldn't reach Jira, so project numbers are empty. Runs and approvals below still come from CogniPM."
     data = build_dashboard_data(rows)
 
     with _lock:
         run_counts = {r["level"]: r["n"] for r in _conn.execute("SELECT level, COUNT(*) AS n FROM runs GROUP BY level")}
-        pending_levels = len(_conn.execute("SELECT DISTINCT level FROM runs WHERE status = 'awaiting_review'").fetchall())
+        pending_level_codes = {
+            r["level"] for r in _conn.execute("SELECT DISTINCT level FROM runs WHERE status = 'awaiting_review'")
+        }
     run_total = sum(run_counts.values())
+    pending_modes = len({mode_code(code) for code in pending_level_codes})
+    # Group by mode, not raw level - M2 sums L2+L3 into one bucket, so the
+    # dashboard's own breakdown matches the 3-mode nav rather than showing a
+    # 4th bucket nothing links to any more. Each mode keeps one representative
+    # L-code (its own `level` in MODES) purely for the existing per-level
+    # colour classes in the template - no new CSS needed for this redesign.
+    mode_counts: dict[str, int] = {}
+    for level_code, n in run_counts.items():
+        mode_counts[mode_code(level_code)] = mode_counts.get(mode_code(level_code), 0) + n
     run_split = [
-        {"level": code, "name": level_name(code), "count": run_counts[code], "pct": max(round(run_counts[code] / run_total * 100), 8)}
-        for code in ("L1", "L2", "L3", "L4")
-        if run_counts.get(code)
+        {
+            "level": mode["level"],
+            "name": mode["name"],
+            "count": mode_counts[mode["code"]],
+            "pct": max(round(mode_counts[mode["code"]] / run_total * 100), 8),
+        }
+        for mode in MODES
+        if mode_counts.get(mode["code"])
     ]
     points_pct = round(data.done_points / data.total_points * 100) if data.total_points else 0
 
@@ -623,7 +742,7 @@ def show_dashboard(request: Request):
             "jira_error": jira_error,
             "run_total": run_total,
             "run_split": run_split,
-            "pending_levels": pending_levels,
+            "pending_modes": pending_modes,
             "points_pct": points_pct,
         },
     )
@@ -657,7 +776,7 @@ def show_chat(request: Request):
     return templates.TemplateResponse(request, "chat.html", {"messages": messages})
 
 
-_CHAT_REDIRECT_TARGETS = {"/chat", "/agent-console?level=L1"}
+_CHAT_REDIRECT_TARGETS = {"/chat"}
 
 
 def _load_chat_history() -> tuple[str, list[dict]]:

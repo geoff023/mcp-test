@@ -1,67 +1,195 @@
 {% extends "base.html" %}
 {% set page_title = "Settings" %}
-{% set crumb = "Settings › Agent permissions" %}
+{% set crumb = "Settings" %}
 {% block content %}
-  <p class="page-subtitle">
-    What each mode lets an agent do. This page is read-only: it shows the rules the gateway
-    enforces, taken straight from the tool table &mdash; not a copy that could drift from it.
+  <nav class="mode-tabs" aria-label="Settings">
+    <button type="button" class="mode-tab active" data-tab-btn="permissions">Agent permissions</button>
+    <button type="button" class="mode-tab" data-tab-btn="limits">Auto-Pilot limits</button>
+  </nav>
+  <p class="settings-hint">
+    Changes here apply to every new run. Runs in progress keep the limits they started with.
   </p>
 
-  <h2>Agent permissions</h2>
-  <div class="card">
-    <table class="perm-table">
-      <thead>
-        <tr><th>Mode</th><th>Tools the agent is given</th><th>Creates</th><th>Writes to Jira</th></tr>
-      </thead>
-      <tbody>
-        {% for lv in levels %}
-          <tr>
-            <td>
-              <span class="level-pill level-{{ lv.code }}">{{ lv.name }}</span>
-              <div class="muted" style="margin-top:4px">{{ lv.tagline }}</div>
-            </td>
-            <td>
-              <ul class="tool-list">
-                {% for t in lv.tools %}<li class="tool {{ 'write' if t.write }}">{{ t.label }}</li>{% endfor %}
-              </ul>
-            </td>
-            <td>{{ lv.creates }}</td>
-            <td>{{ lv.writes }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <p class="chart-caption" style="margin-top:14px">
-      Orange tools stage or apply changes. Consultant has none of them: they are absent from its
-      tool list, not switched off. There is no mode where an agent writes without a person in the loop.
-    </p>
+  <div>
+      <section id="tab-permissions">
+        <p class="page-subtitle">
+          What each mode may read, propose, and write. Approve is always what writes to Jira - this
+          page is read-only, taken straight from the tool table the gateway enforces, not a copy that
+          could drift from it.
+        </p>
+
+        <h2>Agent permissions</h2>
+        <div class="card">
+          <table class="perm-table">
+            <thead>
+              <tr><th>Mode</th><th>Reads</th><th>May propose / write</th><th>Creates</th><th>Writes to Jira</th><th>On</th></tr>
+            </thead>
+            <tbody>
+              {% for m in modes %}
+                <tr>
+                  <td>
+                    <span class="level-pill level-{{ m.code }}">{{ m.mode }}</span>
+                    <div class="muted" style="margin-top:4px">{{ m.tagline }}</div>
+                  </td>
+                  <td>
+                    <ul class="tool-list">
+                      {% for t in m.tools if not t.write %}<li class="tool">{{ t.label }}</li>{% endfor %}
+                      {% if not m.tools %}<li class="tool">Nothing</li>{% endif %}
+                    </ul>
+                  </td>
+                  <td>
+                    <ul class="tool-list">
+                      {% for t in m.tools if t.write %}<li class="tool write">{{ t.label }}</li>{% else %}<li class="tool">Nothing</li>{% endfor %}
+                    </ul>
+                  </td>
+                  <td>{{ m.creates }}</td>
+                  <td>{{ m.writes }}</td>
+                  <td>
+                    <label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="warning-banner">
+          <span aria-hidden="true">⚠</span>
+          <span>
+            <strong>Milestone due dates</strong> &mdash; no mode may change the due date of a
+            milestone issue. The gateway refuses the call and records the refusal; the agent
+            cannot negotiate with it.
+          </span>
+        </div>
+
+        <h2>Recommended mode by task type</h2>
+        <div class="card">
+          <div class="task-rec-grid">
+            {% for task in task_types %}
+              <div class="task-rec-row">
+                <span>{{ task.label }}{% if not task.available %} <span class="muted">&middot; Coming soon</span>{% endif %}</span>
+                <select class="rule-input task-rec-select" disabled>
+                  <option selected>{{ mode_name(task.recommended) }}</option>
+                </select>
+              </div>
+            {% endfor %}
+          </div>
+          <p class="chart-caption" style="margin-top:14px">Shown on Super-Pilot's task step. You can still choose any mode.</p>
+          <div class="settings-toggle-row">
+            <span>Warn me when I pick a higher mode than recommended for high-impact tasks</span>
+            <label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-limits" hidden>
+        <p class="page-subtitle">
+          Auto-Pilot runs without you watching. These limits are its boundary. Anything outside them
+          pauses the run and asks you.
+        </p>
+        <p class="chart-caption">
+          Not enforced yet &mdash; nothing in the gateway checks these numbers this milestone.
+          Deletes, sprint-scope changes and assignee changes are the exception: no tool for any of
+          them exists at any level, so those really are never.
+        </p>
+
+        <div class="limits-grid">
+          <div class="card">
+            <h3>When it may run</h3>
+            <p class="muted" style="margin:2px 0 12px">Who starts a run</p>
+            <label class="radio-card">
+              <input type="radio" name="when-run" checked disabled>
+              <span><span class="radio-card-label">Only when I start it</span>
+                <span class="radio-card-sub">From the Auto-Pilot page, using Run now</span></span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="when-run" disabled>
+              <span><span class="radio-card-label">On a schedule</span>
+                <span class="radio-card-sub">Not built in this milestone</span></span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="when-run" disabled>
+              <span><span class="radio-card-label">On a Jira event</span>
+                <span class="radio-card-sub">Not built in this milestone</span></span>
+            </label>
+            <div class="settings-toggle-row">
+              <span>Notify me when a run is ready</span>
+              <label class="switch"><input type="checkbox" checked disabled><span class="switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>What it may touch</h3>
+            <p class="muted" style="margin:2px 0 12px">Scope and fields</p>
+            <dl class="automation-detail-grid">
+              <dt>Project</dt><dd>{{ sh.project_key or "Not set" }}</dd>
+              <dt>Scope</dt><dd>Unestimated, all, or specific issues</dd>
+              <dt>Issue types</dt><dd>Story only</dd>
+            </dl>
+            <p class="muted" style="margin:14px 0 6px">Fields it may change</p>
+            <div class="field-grid">
+              <label class="field-check"><input type="checkbox" checked disabled>Story points</label>
+              <label class="field-check"><input type="checkbox" checked disabled>Due date</label>
+              <label class="field-check"><input type="checkbox" disabled>Labels</label>
+              <label class="field-check"><input type="checkbox" disabled>Comments</label>
+              <label class="field-check"><input type="checkbox" disabled>Priority</label>
+              <label class="field-check"><input type="checkbox" disabled>Summary</label>
+              <label class="field-check"><input type="checkbox" disabled>Description</label>
+              <label class="field-check"><input type="checkbox" disabled>Assignee</label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>How much per run</h3>
+            <p class="muted" style="margin:2px 0 12px">The blast radius</p>
+            <dl class="automation-detail-grid">
+              <dt>Max changes</dt><dd>No cap set</dd>
+              <dt>Max issues touched</dt><dd>No cap set</dd>
+            </dl>
+            <div class="settings-toggle-row"><span>Deletes</span><span class="locked-badge">Never</span></div>
+            <div class="settings-toggle-row"><span>Sprint scope changes</span><span class="locked-badge">Never</span></div>
+            <div class="settings-toggle-row"><span>Changes to assignees</span><span class="locked-badge">Never</span></div>
+          </div>
+
+          <div class="card">
+            <h3>If it needs a decision and you are away</h3>
+            <p class="muted" style="margin:2px 0 12px">Applies to unattended runs and waiting batches</p>
+            <label class="radio-card">
+              <input type="radio" name="away" checked disabled>
+              <span><span class="radio-card-label">Pause and notify me</span>
+                <span class="radio-card-sub">In-app. Nothing continues without you - Authorize and Approve stay separate clicks.</span></span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="away" disabled>
+              <span><span class="radio-card-label">Skip that change and continue</span>
+                <span class="radio-card-sub">Not built in this milestone</span></span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="away" disabled>
+              <span><span class="radio-card-label">Stop the run</span>
+                <span class="radio-card-sub">Not built in this milestone</span></span>
+            </label>
+            <div class="settings-toggle-row">
+              <span>A waiting batch expires after</span>
+              <select class="rule-input task-rec-select" disabled>
+                <option selected>{{ token_ttl_minutes }} minutes</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
   </div>
 
-  <h2>Guardrails</h2>
-  <div class="card guardrail">
-    <div>
-      <strong>Milestone due dates</strong>
-      <span class="muted">
-        No agent, at any mode, may change the due date of an issue that is a milestone. The gateway
-        refuses the call and records the refusal; the agent cannot negotiate with it.
-      </span>
-    </div>
-  </div>
-
-  <h2>Recommended mode by task type</h2>
-  <div class="card">
-    <table class="perm-table">
-      <thead><tr><th>Task</th><th>Recommended mode</th><th>Status</th></tr></thead>
-      <tbody>
-        {% for task in task_types %}
-          <tr>
-            <td>{{ task.label }}</td>
-            <td><span class="level-pill level-{{ task.recommended }}">{{ level_name(task.recommended) }}</span></td>
-            <td>{{ "Available" if task.available else "Coming soon" }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <p class="chart-caption" style="margin-top:14px">Shown on the New task page. You can still choose any mode.</p>
-  </div>
+  <script>
+    (function () {
+      var buttons = document.querySelectorAll("[data-tab-btn]");
+      var tabs = { permissions: document.getElementById("tab-permissions"), limits: document.getElementById("tab-limits") };
+      buttons.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          Object.keys(tabs).forEach(function (key) { tabs[key].hidden = key !== btn.dataset.tabBtn; });
+          buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        });
+      });
+    })();
+  </script>
 {% endblock %}

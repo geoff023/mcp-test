@@ -35,17 +35,17 @@
       <span class="kpi-label">Pending approvals</span>
       <span class="kpi-value">{{ sh.awaiting }}</span>
       <span class="kpi-sub">
-        {% if sh.awaiting %}Across {{ pending_levels }} autonomy {{ "level" if pending_levels == 1 else "levels" }} &middot; <a href="/approvals">Review</a>
+        {% if sh.awaiting %}Across {{ pending_modes }} {{ "mode" if pending_modes == 1 else "modes" }} &middot; <a href="/approvals">Review</a>
         {% else %}Nothing is waiting for you{% endif %}
       </span>
     </div>
 
-    <div class="kpi" title="Runs started from New task. Chat questions are not runs.">
+    <div class="kpi" title="Runs started from Super-Pilot or Auto-Pilot. Chat questions are not runs.">
       <span class="kpi-label">Agent runs</span>
       <span class="kpi-value">{{ run_total }}</span>
-      <span class="kpi-sub">By autonomy level</span>
+      <span class="kpi-sub">By mode</span>
       {% if run_split %}
-        <span class="kpi-split" role="img" aria-label="Runs by autonomy level">
+        <span class="kpi-split" role="img" aria-label="Runs by mode">
           {% for r in run_split %}<span class="level-card-{{ r.level }}" style="width: {{ r.pct }}%"></span>{% endfor %}
         </span>
         <span class="kpi-split-legend">

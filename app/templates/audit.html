@@ -27,7 +27,7 @@
             <summary class="audit-row audit-summary">
               <span class="audit-icon outcome-{{ head['outcome'] }}" aria-hidden="true">{{ outcome_icon(head["outcome"]) }}</span>
               <span class="audit-when muted">{{ full_datetime(head["ts"], seconds=False) }}</span>
-              <span class="audit-who">{% if head["level"] %}<span class="level-pill level-{{ head['level'] }}">{{ level_name(head["level"]) }}</span>{% endif %}</span>
+              <span class="audit-who">{% if head["level"] %}<span class="level-pill level-{{ head['level'] }}">{{ mode_name(head["level"]) }}</span>{% endif %}</span>
               <span class="audit-what"><strong>{{ friendly_action(head["action"]) }}</strong></span>
               <span class="audit-meta">
                 <a href="/runs/{{ group.run_id }}" class="audit-run">Run {{ group.run_id[:8] }}</a>
@@ -51,7 +51,7 @@
           <div class="audit-row audit-row-single">
             <span class="audit-icon outcome-{{ head['outcome'] }}" aria-hidden="true">{{ outcome_icon(head["outcome"]) }}</span>
             <span class="audit-when muted">{{ full_datetime(head["ts"], seconds=False) }}</span>
-            <span class="audit-who">{% if head["level"] %}<span class="level-pill level-{{ head['level'] }}">{{ level_name(head["level"]) }}</span>{% endif %}</span>
+            <span class="audit-who">{% if head["level"] %}<span class="level-pill level-{{ head['level'] }}">{{ mode_name(head["level"]) }}</span>{% endif %}</span>
             <span class="audit-what">
               <strong>{{ friendly_actor(head["actor"]) }}</strong> {{ friendly_action(head["action"]) }}{% if detail %} <span class="muted">&mdash; {{ detail }}</span>{% endif %}
             </span>

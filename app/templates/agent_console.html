@@ -1,12 +1,8 @@
 {% extends "base.html" %}
-{% import "_chat_thread.html" as chat_thread_macro %}
 {% import "_progress.html" as progress %}
-{% set page_title = "New task" %}
+{% set page_title = "Super-Pilot" %}
 {% block content %}
-  <p class="page-subtitle">
-    Pick a task, choose how much the agents may do, then review what they propose. Nothing
-    reaches Jira until a person approves it.
-  </p>
+  <p class="page-subtitle">{{ mode_tagline("L2") }}</p>
 
   <nav class="stepper" aria-label="Progress">
     <span class="stepper-item" id="stepper-item-1" data-step="1">
@@ -14,16 +10,13 @@
     </span>
     <span class="stepper-connector"></span>
     <span class="stepper-item" id="stepper-item-2" data-step="2">
-      <span class="stepper-badge">2</span> Working mode
-    </span>
-    <span class="stepper-connector"></span>
-    <span class="stepper-item" id="stepper-item-3" data-step="3">
-      <span class="stepper-badge">3</span> <span id="stepper-label-3">Run</span>
+      <span class="stepper-badge">2</span> Run
     </span>
   </nav>
 
   <form method="post" action="/agent-console/run" class="agent-console-form" id="task-form">
     <input type="hidden" name="task_type" value="reestimate">
+    <input type="hidden" name="level" value="L2">
 
     <section class="console-panel card" id="step-1">
       <div class="console-step">
@@ -39,7 +32,19 @@
           </div>
           <p class="chip-legend">
             <span class="lead">Dot = recommended mode:</span>
-            {% for code in ("L1", "L2", "L3", "L4") %}<span class="level-card-{{ code }}">{{ level_name(code) }}</span>{% endfor %}
+            {% for code in ("L1", "L2") %}<span class="level-card-{{ code }}">{{ mode_name(code) }}</span>{% endfor %}
+          </p>
+        </div>
+      </div>
+
+      <div class="console-step">
+        <div class="step-body">
+          <span class="step-title">Configure the rule</span>
+          <input type="text" class="rule-input" placeholder="Automatically update all tasks with no story points" disabled>
+          <p class="chart-caption">
+            Simulates: a new story with no estimate is added to the backlog, matching this rule.
+            In this milestone, clicking Run below is the trigger &mdash; there's no live Jira
+            webhook or background poller yet, see Settings for what's actually built.
           </p>
         </div>
       </div>
@@ -75,58 +80,41 @@
         </div>
       </div>
 
-      <div class="console-actions">
-        <span></span>
-        <button type="button" class="btn-primary" data-next>Next: working mode</button>
-      </div>
-    </section>
-
-    <section class="console-panel card" id="step-2" hidden>
-      <span class="step-title">How much autonomy should it have?</span>
-      <div class="level-card-grid">
-        {% for level in ("L1", "L2", "L3", "L4") %}
-          <label class="level-card level-card-{{ level }}">
-            <span class="level-card-head">
-              <input type="radio" name="level" value="{{ level }}" {{ "checked" if default_level == level else "" }}>
-              <span class="level-card-name">{{ level_name(level) }}</span>
-              <span class="level-card-recommended" hidden>Recommended</span>
-            </span>
-            <span class="level-card-tagline">{{ level_tagline(level) }}</span>
-          </label>
-        {% endfor %}
-      </div>
-
-      <div class="level-detail">
-        <div class="level-detail-may">
-          <div class="level-detail-col-title">May</div>
-          <div id="level-detail-may-text"></div>
+      <div class="console-step">
+        <div class="step-body">
+          <span class="step-title">Super-Pilot mode</span>
+          <div class="level-detail">
+            <div class="level-detail-may">
+              <div class="level-detail-col-title">May</div>
+              <div>Read Jira, and propose changes you can edit before anything sends.</div>
+            </div>
+            <div class="level-detail-may-not">
+              <div class="level-detail-col-title">May not</div>
+              <div>Apply anything without your edit and explicit approval.</div>
+            </div>
+            <dl class="this-run">
+              <dt>Creates</dt><dd>{{ level_facts.L2.creates }}</dd>
+              <dt>Writes to Jira</dt><dd>{{ level_facts.L2.writes }}</dd>
+            </dl>
+          </div>
         </div>
-        <div class="level-detail-may-not">
-          <div class="level-detail-col-title">May not</div>
-          <div id="level-detail-may-not-text"></div>
-        </div>
-        <dl class="this-run">
-          <dt>Creates</dt><dd id="level-detail-creates"></dd>
-          <dt>Writes to Jira</dt><dd id="level-detail-writes"></dd>
-        </dl>
       </div>
 
       <div class="console-actions">
-        <button type="button" class="btn-secondary" data-back>Back</button>
-        <button type="button" class="btn-primary" data-next id="step-2-next">Next</button>
+        <span></span>
+        <button type="button" class="btn-primary" data-next>Next: review and run</button>
       </div>
     </section>
 
-    <section class="console-panel card" id="step-3-run" hidden>
+    <section class="console-panel card" id="step-2-run" hidden>
       <span class="step-title">Ready to run</span>
       <p class="chart-caption" id="run-summary"></p>
 
       <div class="ai-disclaimer">
         <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
         <span>
-          Whatever mode you picked, the agent can make mistakes — a wrong estimate, a
-          misjudged assumption. Nothing reaches Jira until a human approves it (or, at
-          Super-Pilot, issues a token) — review every proposal before it's applied.
+          The agent can make mistakes — a wrong estimate, a misjudged assumption. Nothing
+          reaches Jira until you review and approve each proposal below.
         </span>
       </div>
 
@@ -137,7 +125,7 @@
     </section>
   </form>
 
-  <section class="console-panel card" id="step-3-progress" hidden>
+  <section class="console-panel card" id="step-2-progress" hidden>
     <span class="step-title" id="progress-title">The agent is working</span>
     <p class="chart-caption" id="progress-caption">
       Each step is something the agent actually did. You'll land on the review page when it
@@ -150,118 +138,34 @@
     </div>
   </section>
 
-  <section class="console-panel card" id="step-3-chat" hidden>
-    <span class="step-title">{{ level_name("L1") }} chat</span>
-    <p class="chart-caption">
-      {{ level_tagline("L1") }} Ask about issues, estimates, or status &mdash; nothing here can
-      stage or apply a change. This is both the run and the review for Consultant mode - there is
-      no separate proposal to approve.
-    </p>
-    <div class="ai-disclaimer">
-      <span class="ai-disclaimer-icon" aria-hidden="true">⚠</span>
-      <span>The assistant can make mistakes. Verify anything important against Jira directly.</span>
-    </div>
-
-    {{ chat_thread_macro.chat_thread(chat_messages) }}
-
-    {{ progress.block() }}
-
-    <form method="post" action="/chat" class="chat-form">
-      <textarea name="message" placeholder="Ask about your Jira project..." required></textarea>
-      <input type="hidden" name="redirect_to" value="/agent-console?level=L1">
-      <button type="submit" class="approve run-btn">Send</button>
-    </form>
-
-    <div class="console-actions">
-      <button type="button" class="btn-secondary" data-back>Back</button>
-      <span></span>
-    </div>
-  </section>
-
   <script src="/static/progress.js?v={{ script_version() }}"></script>
   <script>
     (function () {
-      var LEVEL_DETAILS = {
-        L1: {
-          may: "Read issues and chat about them.",
-          mayNot: "Write, propose, or apply anything - there is no tool for that, structurally.",
-        },
-        L2: {
-          may: "Read Jira, and propose changes you can edit before anything sends.",
-          mayNot: "Apply anything without your edit and explicit approval.",
-        },
-        L3: {
-          may: "Read Jira, and propose a finished, locked proposal for you to review.",
-          mayNot: "Apply anything itself - you approve, comment, or re-run it.",
-        },
-        L4: {
-          may: "Read, propose, and apply changes once you issue it a token.",
-          mayNot: "Apply anything without a token your browser explicitly issued.",
-        },
-      };
       var SCOPE_LABELS = {
         unestimated: "stories with no estimate yet",
         all: "all stories in this project",
         specific: "specific issue(s)",
       };
 
-      // Recommended level per task type and what each level creates / writes come from
-      // app/levels.py, so this page, Settings and the docs cannot drift apart.
-      var TASK_RECOMMENDATIONS = {{ task_recs|tojson }};
-      var LEVEL_FACTS = {{ level_facts|tojson }};
-
       var current = 1;
-
-      function selectedLevel() {
-        var checked = document.querySelector('input[name="level"]:checked');
-        return checked ? checked.value : null;
-      }
-
-      function selectedTaskType() {
-        var checked = document.querySelector('input[name="task_type_choice"]:checked');
-        return checked ? checked.value : "reestimate";
-      }
-
-      function updateRecommendedBadge() {
-        var recommended = TASK_RECOMMENDATIONS[selectedTaskType()];
-        document.querySelectorAll(".level-card-recommended").forEach(function (el) { el.hidden = true; });
-        var badge = recommended && document.querySelector(".level-card-" + recommended + " .level-card-recommended");
-        if (badge) badge.hidden = false;
-      }
-
-      function updateLevelDetail() {
-        var level = selectedLevel();
-        var detail = LEVEL_DETAILS[level];
-        if (!detail) return;
-        document.getElementById("level-detail-may-text").textContent = detail.may;
-        document.getElementById("level-detail-may-not-text").textContent = detail.mayNot;
-        document.getElementById("level-detail-creates").textContent = LEVEL_FACTS[level].creates;
-        document.getElementById("level-detail-writes").textContent = LEVEL_FACTS[level].writes;
-      }
 
       function updateRunSummary() {
         var scope = document.querySelector('input[name="scope"]:checked');
         var scopeLabel = scope ? SCOPE_LABELS[scope.value] || scope.value : "";
-        var level = selectedLevel();
-        var levelLabel = level ? document.querySelector(".level-card-" + level + " .level-card-name").textContent : "";
-        document.getElementById("run-summary").textContent =
-          "Effort estimation on " + scopeLabel + ", at " + levelLabel + " autonomy.";
+        document.getElementById("run-summary").textContent = "Effort estimation on " + scopeLabel + ".";
       }
 
       function showStep(n) {
         document.querySelectorAll(".console-panel").forEach(function (el) { el.hidden = true; });
-        var isChat = n === 3 && selectedLevel() === "L1";
-        var panelId = n === 3 ? (isChat ? "step-3-chat" : "step-3-run") : "step-" + n;
-        document.getElementById(panelId).hidden = false;
+        document.getElementById(n === 2 ? "step-2-run" : "step-1").hidden = false;
 
         document.querySelectorAll(".stepper-item").forEach(function (el) {
           var step = parseInt(el.dataset.step, 10);
           el.classList.toggle("stepper-item-active", step === n);
           el.classList.toggle("stepper-item-done", step < n);
         });
-        document.getElementById("stepper-label-3").textContent = isChat ? "Chat" : "Run";
 
-        if (n === 3 && !isChat) updateRunSummary();
+        if (n === 2) updateRunSummary();
         current = n;
       }
 
@@ -271,34 +175,17 @@
       document.querySelectorAll("[data-back]").forEach(function (btn) {
         btn.addEventListener("click", function () { showStep(current - 1); });
       });
-      document.querySelectorAll('input[name="level"]').forEach(function (radio) {
-        radio.addEventListener("change", updateLevelDetail);
-      });
-      document.querySelectorAll('input[name="task_type_choice"]').forEach(function (radio) {
-        radio.addEventListener("change", updateRecommendedBadge);
-      });
-
-      var params = new URLSearchParams(window.location.search);
-      // No explicit ?level= (e.g. not a return from the chat step) - pre-select
-      // the recommended level for whichever task type is chosen, instead of
-      // the server's flat L3 default. An explicit ?level= always wins.
-      if (!params.get("level")) {
-        var recommendedRadio = document.querySelector('input[name="level"][value="' + TASK_RECOMMENDATIONS[selectedTaskType()] + '"]');
-        if (recommendedRadio) recommendedRadio.checked = true;
-      }
-      updateLevelDetail();
-      updateRecommendedBadge();
 
       // With JavaScript the run happens in the background and the progress panel shows
       // each real step as the agent takes it; without it the form posts and waits.
       var taskForm = document.getElementById("task-form");
-      var progressPanel = document.getElementById("step-3-progress");
+      var progressPanel = document.getElementById("step-2-progress");
       var progressBlock = progressPanel.querySelector(".progress");
       var retryBtn = progressPanel.querySelector("[data-retry]");
       var progressTitle = document.getElementById("progress-title");
       var progressCaption = document.getElementById("progress-caption");
       taskForm.addEventListener("submit", function (e) {
-        if (current !== 3) { e.preventDefault(); return; }  // Enter on an earlier step must not start a run
+        if (current !== 2) { e.preventDefault(); return; }  // Enter on step 1 must not start a run
         if (!window.OrbitProgress) return;                  // no script: post normally and wait
         e.preventDefault();
         document.querySelectorAll(".console-panel").forEach(function (el) { el.hidden = true; });
@@ -316,11 +203,9 @@
           },
         });
       });
-      retryBtn.addEventListener("click", function () { showStep(3); });
+      retryBtn.addEventListener("click", function () { showStep(2); });
 
-      // Returning from a chat send (POST /chat redirect_to=/agent-console?level=L1) -
-      // reopen straight on the chat step instead of resetting to step 1.
-      showStep(params.get("level") === "L1" ? 3 : 1);
+      showStep(1);
     })();
   </script>
 {% endblock %}

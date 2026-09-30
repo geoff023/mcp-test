@@ -3,7 +3,6 @@
 {% set crumb = "Approvals › Run " ~ run["id"][:8] %}
 {% block content %}
   {% set editable = run["level"] == "L2" and run["status"] == "awaiting_review" %}
-  {% set ack_mode = run["level"] == "L4" and run["status"] == "awaiting_review" and not active_token %}
 
   <p class="back-link"><a href="/approvals">All approvals</a></p>
 
@@ -16,7 +15,7 @@
     <dl class="run-meta">
       <dt>Mode</dt>
       <dd>
-        <span class="level-pill level-{{ run['level'] }}">{{ level_name(run["level"]) }}</span>
+        <span class="level-pill level-{{ run['level'] }}">{{ mode_name(run["level"]) }}</span>
         <span class="level-code">({{ run["level"] }})</span>
       </dd>
       <dt>Task</dt><dd>{{ "Effort estimation" if run["task_type"] == "reestimate" else run["task_type"] }}</dd>
@@ -27,17 +26,16 @@
 
     {% if run["level"] == "L2" %}
       <p class="mode-note">
-        <strong>{{ level_name("L2") }} mode</strong> &mdash; {{ level_tagline("L2") }} Edit any value below, then Approve.
+        <strong>{{ mode_name("L2") }} mode</strong> &mdash; {{ mode_tagline("L2") }} Edit any value below, then Approve.
       </p>
     {% elif run["level"] == "L3" %}
       <p class="mode-note">
-        <strong>{{ level_name("L3") }} mode</strong> &mdash; {{ level_tagline("L3") }} The values below are locked.
+        <strong>{{ mode_name("L3") }} mode</strong> &mdash; {{ mode_tagline("L3") }} The values below are locked.
       </p>
     {% elif run["level"] == "L4" %}
       <p class="mode-note">
-        <strong>{{ level_name("L4") }} mode</strong> &mdash; acknowledge each change individually, then issue a
-        token. Only the agent itself can spend that token to write to Jira &mdash; approving never
-        happens directly here.
+        <strong>{{ mode_name("L4") }} mode</strong> &mdash; two clicks, not one. Authorise the whole
+        batch first, then Approve to write it to Jira &mdash; no per-item review.
       </p>
     {% endif %}
   </div>
@@ -98,13 +96,6 @@
                 {% endif %}
               </dd>
             </dl>
-            {% if ack_mode %}
-              <form method="post" action="/runs/{{ run['id'] }}/changes/{{ change['id'] }}/acknowledge" class="ack-form">
-                <button type="submit" class="ack-btn {{ 'is-acknowledged' if change['acknowledged'] }}">
-                  {{ "✓ Acknowledged" if change["acknowledged"] else "Acknowledge" }}
-                </button>
-              </form>
-            {% endif %}
           </li>
         {% endfor %}
       </ol>
@@ -117,10 +108,17 @@
           {% if run["level"] == "L2" %}
             {% if rows %}<button type="submit" form="approve-form" class="approve">Approve</button>{% endif %}
           {% elif run["level"] == "L4" %}
-            <form method="post" action="/runs/{{ run['id'] }}/issue-token" class="inline-form">
-              <button type="submit" class="approve" {% if not all_acknowledged %}disabled{% endif %}>Issue token</button>
-              {% if not all_acknowledged %}<span class="edited-note">Acknowledge every change first.</span>{% endif %}
-            </form>
+            {% if rows %}
+              {% if all_acknowledged %}
+                <form method="post" action="/runs/{{ run['id'] }}/approve" class="inline-form">
+                  <button type="submit" class="approve">Approve &amp; write to Jira</button>
+                </form>
+              {% else %}
+                <form method="post" action="/runs/{{ run['id'] }}/authorize" class="inline-form">
+                  <button type="submit" class="approve">Authorize all changes</button>
+                </form>
+              {% endif %}
+            {% endif %}
           {% else %}
             <form method="post" action="/runs/{{ run['id'] }}/approve" class="inline-form">
               <button type="submit" class="approve">Approve</button>

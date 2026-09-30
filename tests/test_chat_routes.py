@@ -76,10 +76,12 @@ def test_chat_post_survives_a_chat_error_and_still_records_the_exchange(client, 
     assert outcome == "failed"
 
 
-def test_chat_post_honours_redirect_to_agent_console(client, monkeypatch):
-    """The embedded chat step in agent_console.html sets redirect_to so
-    sending a message reopens the console on the chat step instead of
-    always landing on the standalone /chat page."""
+def test_chat_post_rejects_a_redirect_target_outside_the_allowlist(client, monkeypatch):
+    """agent_console.html used to embed a chat step and set redirect_to so a
+    message reopened the console there instead of /chat - that embedded step
+    is gone (Co-Pilot lives entirely at /chat now), so that target is no
+    longer in the allowlist and must fall back to /chat like any other
+    unrecognised value, not be honoured."""
     test_client, _ = client
 
     async def fake_run_chat_turn(*, history, message):
@@ -94,7 +96,7 @@ def test_chat_post_honours_redirect_to_agent_console(client, monkeypatch):
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/agent-console?level=L1"
+    assert resp.headers["location"] == "/chat"
 
 
 def test_chat_post_rejects_an_unknown_redirect_to(client, monkeypatch):

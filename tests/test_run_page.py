@@ -58,7 +58,7 @@ def test_l3_awaiting_review_note_points_at_approve_or_send_back(client, conn, ji
     assert "written by an AI agent and may be wrong" in resp.text
 
 
-def test_l4_awaiting_review_with_no_token_note_asks_to_acknowledge(client, conn, jira_with_spy):
+def test_l4_awaiting_review_with_no_token_note_asks_to_authorize(client, conn, jira_with_spy):
     test_client, _ = client
     jira, _ = jira_with_spy
     run_id = _staged_run(conn, jira, "L4")
@@ -66,7 +66,9 @@ def test_l4_awaiting_review_with_no_token_note_asks_to_acknowledge(client, conn,
 
     resp = test_client.get(f"/runs/{run_id}")
 
-    assert "acknowledge each change below" in resp.text
+    assert "authorise the batch below" in resp.text
+    assert 'action="/runs/{}/authorize"'.format(run_id) in resp.text
+    assert "Authorize all changes" in resp.text
 
 
 def test_l4_awaiting_review_with_active_token_note_says_not_yet(client, conn, jira_with_spy):

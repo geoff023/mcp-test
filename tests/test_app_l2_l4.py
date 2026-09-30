@@ -142,3 +142,106 @@ def test_l4_issue_token_after_acknowledging_then_commit_changes_succeeds(client,
 
     assert result == {"run_id": run_id, "applied_issue_keys": ["TEST-1"]}
     assert conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()[0] == "applied"
+
+
+# ---------- test 4: /authorize then /approve - two human clicks, no agent round trip ----------
+
+
+def test_authorize_acknowledges_every_pending_change_without_writing_or_issuing_a_token(client, conn, jira_with_spy):
+    test_client, spy = client
+    jira, _ = jira_with_spy
+    run_id, change_id = _seed_run(conn, jira, "L4")
+
+    resp = test_client.post(f"/runs/{run_id}/authorize")
+    assert resp.status_code == 200
+
+    assert conn.execute(
+        "SELECT acknowledged FROM staged_changes WHERE id = ?", (change_id,)
+    ).fetchone()[0] == 1
+    # Authorizing applies nothing and issues no token - that only happens on /approve.
+    assert conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()[0] == "awaiting_review"
+    assert conn.execute("SELECT COUNT(*) FROM approval_tokens WHERE run_id = ?", (run_id,)).fetchone()[0] == 0
+
+    audit = conn.execute(
+        "SELECT action, outcome, detail FROM audit_log WHERE run_id = ? AND action = 'authorize'", (run_id,)
+    ).fetchone()
+    assert audit[0:2] == ("authorize", "acknowledged")
+    assert "1 change(s) authorised" in audit[2]
+
+
+def test_authorize_covers_multiple_staged_changes_in_one_call(client, conn, jira_with_spy):
+    test_client, _ = client
+    jira, _ = jira_with_spy
+    tools = GatewayTools(jira=jira, conn=conn, level="L4")
+    run_id = tools.start_run(task_type="reestimate", scope="project = TEST")
+    tools.propose_estimate_change(run_id, "TEST-1", new_points=3, reasoning="Long enough reasoning here.", assumptions="NA")
+    tools.propose_estimate_change(run_id, "TEST-2", new_points=5, reasoning="Long enough reasoning here.", assumptions="NA")
+    tools.finish_run(run_id)
+
+    resp = test_client.post(f"/runs/{run_id}/authorize")
+
+    assert resp.status_code == 200
+    acked = conn.execute("SELECT acknowledged FROM staged_changes WHERE run_id = ?", (run_id,)).fetchall()
+    assert [row[0] for row in acked] == [1, 1]
+
+
+def test_authorize_refuses_for_a_non_l4_run(client, conn, jira_with_spy):
+    test_client, _ = client
+    jira, _ = jira_with_spy
+    run_id, _ = _seed_run(conn, jira, "L3")
+
+    resp = test_client.post(f"/runs/{run_id}/authorize")
+
+    assert resp.status_code == 400
+    assert conn.execute("SELECT COUNT(*) FROM approval_tokens WHERE run_id = ?", (run_id,)).fetchone()[0] == 0
+
+
+def test_authorize_refuses_with_no_staged_changes(client, conn, jira_with_spy):
+    test_client, _ = client
+    jira, _ = jira_with_spy
+    tools = GatewayTools(jira=jira, conn=conn, level="L4")
+    run_id = tools.start_run(task_type="reestimate", scope="project = TEST")
+    tools.finish_run(run_id)
+
+    resp = test_client.post(f"/runs/{run_id}/authorize")
+
+    assert resp.status_code == 400
+
+
+def test_approve_refuses_for_l4_until_the_batch_is_authorized(client, conn, jira_with_spy):
+    test_client, spy = client
+    jira, _ = jira_with_spy
+    run_id, change_id = _seed_run(conn, jira, "L4")
+
+    resp = test_client.post(f"/runs/{run_id}/approve")
+
+    assert resp.status_code == 400
+    assert "not yet authorised" in resp.text
+    assert conn.execute(
+        "SELECT applied_at FROM staged_changes WHERE id = ?", (change_id,)
+    ).fetchone()[0] is None
+    assert conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()[0] == "awaiting_review"
+
+
+def test_approve_writes_the_authorized_l4_batch_straight_to_jira(client, conn, jira_with_spy):
+    test_client, spy = client
+    jira, _ = jira_with_spy
+    spy.request.return_value.raise_for_status.return_value = None
+    run_id, change_id = _seed_run(conn, jira, "L4")
+
+    ack_resp = test_client.post(f"/runs/{run_id}/authorize")
+    assert ack_resp.status_code == 200
+
+    approve_resp = test_client.post(f"/runs/{run_id}/approve")
+    assert approve_resp.status_code == 200
+
+    assert conn.execute(
+        "SELECT applied_at FROM staged_changes WHERE id = ?", (change_id,)
+    ).fetchone()[0] is not None
+    assert conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()[0] == "applied"
+
+    audit = conn.execute(
+        "SELECT action, outcome, detail FROM audit_log WHERE run_id = ? AND action = 'approve'", (run_id,)
+    ).fetchone()
+    assert audit[0:2] == ("approve", "applied")
+    assert "TEST-1" in audit[2]

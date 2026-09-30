@@ -84,7 +84,17 @@ come later. Never implement a guardrail as a prompt instruction.
 
 ---
 
-## 3. What's built — the five surfaces
+## 3. What's built — the five surfaces, behind three modes
+
+The product surface is 3 modes now, not 4 levels — a milestone redesign from the supervisor's
+(Assalaarachchi's) own framework revision. `app/levels.py`'s module docstring is the authoritative
+account; short version: **M1 Co-Pilot** (chat, Consult/Execute sub-modes), **M2 Super-Pilot**
+(propose an editable draft, approve/reject/rerun before it writes — display-merges the old L2 and
+L3), **M3 Auto-Pilot** (a rule you authorise once, still gated by a token before anything writes —
+was L4). The L1–L4 codes, `TOOLS_BY_LEVEL`, and every tool-layer enforcement are **unchanged** —
+this only reshaped the front door onto them. `mode_name()`/`mode_code()` do the L-code → mode
+display mapping everywhere except Settings, which deliberately still shows the true L1–L4 rows
+(see its own note in `app/levels.py`).
 
 Every page lives under one FastAPI app (`app/main.py`) and shares one app shell taken from the v7
 Figma prototype (`FIT4701-Agentic-PM-Prototype-v7.fig`): a left sidebar (project card, nav grouped
@@ -92,17 +102,29 @@ under AGENTS and CONFIGURATION, an Approvals badge counting runs waiting on a hu
 and a top bar (breadcrumb, page title, Open in Jira). `/` redirects to the Dashboard, the prototype's
 first nav item. The pages:
 
-- **New task** (`/agent-console`; the Agent console) — a 3-step wizard: pick a task type (only Effort
-  Estimation is real; the rest are visible-but-disabled "soon" chips, each already carrying a
-  fixed recommended-autonomy mapping so the mapping is correct the moment it ships) → pick a
-  working mode (a "Recommended" badge steers higher-risk task types toward lower autonomy) →
-  either a Run confirmation for L2–L4 (submits to the orchestrator, redirects to the run's
-  review page) or, for L1, the chat panel embedded directly as step 3 — a read-only level has
-  no proposal to review, so the conversation itself is both the run and the review.
-- **Chat** (`/chat`, its own sidebar tab) — the same L1 conversation as the console's embedded step, one shared
-  DB-backed session (`_chat_thread.html` is the shared macro), reachable directly.
+- **Co-Pilot** (`/chat`) — Consult sub-mode: the L1 chat surface, one shared DB-backed session
+  (`_chat_thread.html` is the shared macro). Execute sub-mode is a link, not a rebuild: it hands off
+  to Super-Pilot's own flow (see the M1 "reskin, don't rebuild" decision in the same commit).
+- **Super-Pilot** (`/agent-console`) — a 2-step wizard: pick a task type (only Effort Estimation is
+  real; the rest are visible-but-disabled "soon" chips) and scope, then review and run. Always
+  dispatches at L2. Its review page is editable, one Approve click writes it.
+- **Auto-Pilot** (`/autopilot`) — its own page, not a mode on Super-Pilot's wizard: two tabs,
+  Active automations (default) and Configure. Configure only *feels* like creating a saved rule —
+  "Create automation" just builds a card client-side and switches tabs; nothing persists, there is
+  no automations table this milestone, and reloading the page resets everything back to the one
+  seeded demo card. The toggle switch and Delete button on a card are the same: cosmetic, JS-only.
+  The one real thing on the page is a card's **Run now** button — it POSTs to the same tested
+  `/agent-console/start` path Super-Pilot uses, at level=L4. From there the flow is real: the run
+  lands on `/runs/{id}` awaiting review, Authorize acknowledges the whole batch (no per-item
+  review, no write), then a separate Approve click writes it to Jira — same human-triggered
+  `apply_staged_changes` call every other level's Approve uses, not the agent calling
+  `commit_changes`. That tool (gateway/server.py) stays available for anyone driving a run by hand
+  instead of through this app, but the product UI never depends on it. There is no live Jira
+  webhook or background poller behind either page — a run only starts when a human clicks Run;
+  "Auto-Pilot" describes the batch write and the (simulated) always-on rule, not an unattended
+  trigger.
 - **Approvals** (`/approvals`, `/runs/{id}`) — runs waiting on a human first (oldest first), then every earlier run, and per run the staged-changes review surface:
-  editable at L2, locked at L3, acknowledge-then-issue-token at L4.
+  editable at L2, locked at L3, authorize-then-approve at L4.
 - **Dashboard** (`/dashboard`) — read-only project analytics: stat cards, a status-breakdown
   bar chart, an estimation-coverage donut, a "story points remaining over time" chart
   (explicitly not a sprint burndown — this prototype has no sprint start/end dates), a

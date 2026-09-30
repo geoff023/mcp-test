@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% import "_chat_thread.html" as chat_thread_macro %}
 {% import "_progress.html" as progress %}
-{% set page_title = "Chat" %}
+{% set page_title = "Co-Pilot" %}
 {% block content %}
+  <p class="page-subtitle">{{ mode_tagline("L1") }}</p>
   <div class="card chat-card">
     <div class="chat-head">
-      <span class="level-pill level-L1">{{ level_name("L1") }}</span>
-      <span>{{ level_tagline("L1") }} Nothing is written to Jira &mdash; the assistant can only read it.</span>
+      <span class="level-pill level-L1">Consult</span>
+      <span>{{ level_tagline("L1") }} Nothing is written to Jira &mdash; the assistant can only read it. To stage or apply a change, use <a href="/agent-console">Super-Pilot</a>.</span>
     </div>
 
     <div class="chat-body">
@@ -15,7 +16,7 @@
           <h2>What should the agents advise on?</h2>
           <p>
             The assistant reads your Jira project and answers here. You decide what to copy into
-            Jira. To stage or apply a change, start a <a href="/agent-console">New task</a>.
+            Jira. To stage or apply a change, use <a href="/agent-console">Super-Pilot</a>.
           </p>
           <div class="prompt-grid">
             <button type="button" class="prompt" data-prompt="Which stories have no estimate?"><strong>Which stories have no estimate?</strong><span>Lists stories still missing story points</span></button>

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% import "_progress.html" as progress %}
+{% set page_title = "Auto-Pilot" %}
+{% block content %}
+  <p class="page-subtitle">{{ mode_tagline("L4") }}</p>
+
+  <nav class="mode-tabs" aria-label="Auto-Pilot views">
+    <button type="button" class="mode-tab active" data-tab-btn="automations">
+      Active automations <span class="tab-count" id="automation-count">1</span>
+    </button>
+    <button type="button" class="mode-tab" data-tab-btn="configure">Configure</button>
+  </nav>
+
+  <section id="tab-automations">
+    <p class="chart-caption">
+      Only <strong>Run now</strong> below is real &mdash; it starts the same tested L4 run Super-Pilot
+      uses at L2. The toggle, delete, and the automation itself are demo chrome: nothing here is
+      saved, and reloading this page resets it. There is no automations table in this milestone.
+    </p>
+
+    <div class="automation-list" id="automation-list">
+      <div class="automation-card" data-task-type="reestimate" data-scope="unestimated">
+        <div class="automation-head">
+          <div>
+            <span class="automation-name">Update tasks with no story points</span>
+            <p class="automation-rule">Automatically update all tasks with no story points</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" class="automation-toggle" checked>
+            <span class="switch-track"></span>
+          </label>
+        </div>
+        <dl class="automation-detail-grid">
+          <dt>Task</dt><dd>Effort estimation</dd>
+          <dt>Scope</dt><dd>Stories with no estimate yet</dd>
+          <dt>Mode</dt><dd><span class="level-pill level-L4">{{ mode_name("L4") }}</span></dd>
+          <dt>Created</dt><dd>3 days ago</dd>
+          <dt>Last triggered</dt><dd class="muted">Never run yet</dd>
+        </dl>
+        <div class="automation-foot">
+          <span class="automation-status">Active</span>
+          <div class="automation-foot-actions">
+            <button type="button" class="btn-secondary small automation-delete">Delete</button>
+            <button type="button" class="approve small automation-run">Run now</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="empty" id="automation-empty" hidden>No automations yet &mdash; configure one to see it here.</p>
+  </section>
+
+  <section id="tab-configure" hidden>
+    <div class="console-panel card">
+      <div class="console-step">
+        <div class="step-body">
+          <span class="step-title">What should the agent do?</span>
+          <div class="chip-grid">
+            {% for task in task_types %}
+              <label class="chip level-card-L4 {{ '' if task.available else 'chip-disabled' }}">
+                <input type="radio" name="new_task_type" value="{{ task.slug }}" {{ "checked" if task.available else "disabled" }}>
+                {{ task.label }}{% if not task.available %} <em>Soon</em>{% endif %}
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="console-step">
+        <div class="step-body">
+          <span class="step-title">Configure the rule</span>
+          <input type="text" id="new-rule-name" class="rule-input" value="Automatically update all tasks with no story points">
+          <p class="chart-caption">
+            Simulates: a new task was added to the backlog, matching this rule. In this milestone,
+            that trigger is clicking Run now on the automation itself, not a live Jira webhook or a
+            background watcher &mdash; see Settings for what's actually built.
+          </p>
+        </div>
+      </div>
+
+      <div class="console-step">
+        <div class="step-body">
+          <fieldset class="scope-picker">
+            <legend>Which issues?</legend>
+            <label class="radio-option">
+              <input type="radio" name="new_scope" value="unestimated" checked>
+              Stories with no estimate yet (recommended)
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="new_scope" value="all">
+              All stories in this project
+            </label>
+          </fieldset>
+        </div>
+      </div>
+
+      <div class="console-step">
+        <div class="step-body">
+          <span class="step-title">Auto-Pilot mode</span>
+          <div class="level-detail">
+            <div class="level-detail-may">
+              <div class="level-detail-col-title">May</div>
+              <div>Read, propose, and apply the whole batch once you authorise it and issue a token.</div>
+            </div>
+            <div class="level-detail-may-not">
+              <div class="level-detail-col-title">May not</div>
+              <div>Apply anything without a token your browser explicitly issued.</div>
+            </div>
+            <dl class="this-run">
+              <dt>Creates</dt><dd>{{ level_facts.creates }}</dd>
+              <dt>Writes to Jira</dt><dd>{{ level_facts.writes }}</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div class="console-actions">
+        <span></span>
+        <button type="button" class="btn-primary" id="create-automation-btn">Create automation</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="console-panel card" id="step-progress" hidden>
+    <span class="step-title" id="progress-title">The agent is working</span>
+    <p class="chart-caption" id="progress-caption">
+      Each step is something the agent actually did. You'll land on the review page when it
+      finishes &mdash; nothing reaches Jira until you authorise and approve it.
+    </p>
+    {{ progress.block() }}
+    <div class="console-actions">
+      <button type="button" class="btn-secondary" data-retry hidden>Back</button>
+      <span></span>
+    </div>
+  </section>
+
+  <script src="/static/progress.js?v={{ script_version() }}"></script>
+  <script>
+    (function () {
+      var TASK_LABELS = { reestimate: "Effort estimation" };
+      var SCOPE_LABELS = { unestimated: "Stories with no estimate yet", all: "All stories in this project" };
+
+      var tabButtons = document.querySelectorAll("[data-tab-btn]");
+      var tabs = { automations: document.getElementById("tab-automations"), configure: document.getElementById("tab-configure") };
+      function showTab(name) {
+        Object.keys(tabs).forEach(function (key) {
+          tabs[key].hidden = key !== name;
+        });
+        tabButtons.forEach(function (btn) {
+          btn.classList.toggle("active", btn.dataset.tabBtn === name);
+        });
+      }
+      tabButtons.forEach(function (btn) {
+        btn.addEventListener("click", function () { showTab(btn.dataset.tabBtn); });
+      });
+
+      var list = document.getElementById("automation-list");
+      var countEl = document.getElementById("automation-count");
+      var emptyEl = document.getElementById("automation-empty");
+
+      function updateCount() {
+        var n = list.querySelectorAll(".automation-card").length;
+        countEl.textContent = n;
+        emptyEl.hidden = n !== 0;
+      }
+
+      function wireCard(card) {
+        var toggle = card.querySelector(".automation-toggle");
+        var status = card.querySelector(".automation-status");
+        var runBtn = card.querySelector(".automation-run");
+        toggle.addEventListener("change", function () {
+          card.classList.toggle("is-off", !toggle.checked);
+          status.textContent = toggle.checked ? "Active" : "Paused";
+          runBtn.disabled = !toggle.checked;
+        });
+        card.querySelector(".automation-delete").addEventListener("click", function () {
+          card.remove();
+          updateCount();
+        });
+        runBtn.addEventListener("click", function () { runAutomation(card); });
+      }
+      list.querySelectorAll(".automation-card").forEach(wireCard);
+
+      document.getElementById("create-automation-btn").addEventListener("click", function () {
+        var taskType = document.querySelector('input[name="new_task_type"]:checked');
+        var scope = document.querySelector('input[name="new_scope"]:checked');
+        var ruleName = document.getElementById("new-rule-name").value.trim() || "Untitled automation";
+        if (!taskType) return;
+
+        var card = document.createElement("div");
+        card.className = "automation-card";
+        card.dataset.taskType = taskType.value;
+        card.dataset.scope = scope ? scope.value : "unestimated";
+        card.innerHTML =
+          '<div class="automation-head">' +
+            '<div><span class="automation-name">' + ruleName + '</span>' +
+            '<p class="automation-rule">' + ruleName + '</p></div>' +
+            '<label class="switch"><input type="checkbox" class="automation-toggle" checked><span class="switch-track"></span></label>' +
+          '</div>' +
+          '<dl class="automation-detail-grid">' +
+            '<dt>Task</dt><dd>' + (TASK_LABELS[taskType.value] || taskType.value) + '</dd>' +
+            '<dt>Scope</dt><dd>' + (SCOPE_LABELS[card.dataset.scope] || card.dataset.scope) + '</dd>' +
+            '<dt>Mode</dt><dd><span class="level-pill level-L4">Auto-Pilot</span></dd>' +
+            '<dt>Created</dt><dd>Just now</dd>' +
+            '<dt>Last triggered</dt><dd class="muted">Never run yet</dd>' +
+          '</dl>' +
+          '<div class="automation-foot">' +
+            '<span class="automation-status">Active</span>' +
+            '<div class="automation-foot-actions">' +
+              '<button type="button" class="btn-secondary small automation-delete">Delete</button>' +
+              '<button type="button" class="approve small automation-run">Run now</button>' +
+            '</div>' +
+          '</div>';
+        list.appendChild(card);
+        wireCard(card);
+        updateCount();
+        showTab("automations");
+      });
+
+      var progressPanel = document.getElementById("step-progress");
+      var progressBlock = progressPanel.querySelector(".progress");
+      var retryBtn = progressPanel.querySelector("[data-retry]");
+      var progressTitle = document.getElementById("progress-title");
+      var progressCaption = document.getElementById("progress-caption");
+
+      function runAutomation(card) {
+        var form = new FormData();
+        form.set("task_type", card.dataset.taskType);
+        form.set("scope", card.dataset.scope);
+        form.set("specific_issues", "");
+        form.set("instructions", "");
+        form.set("level", "L4");
+
+        if (!window.OrbitProgress) {
+          // No script fallback: a real, if less smooth, form submit.
+          var f = document.createElement("form");
+          f.method = "post";
+          f.action = "/agent-console/start";
+          form.forEach(function (value, key) {
+            var input = document.createElement("input");
+            input.type = "hidden";
+            input.name = key;
+            input.value = value;
+            f.appendChild(input);
+          });
+          document.body.appendChild(f);
+          f.submit();
+          return;
+        }
+
+        tabs.automations.hidden = true;
+        tabs.configure.hidden = true;
+        progressPanel.hidden = false;
+        retryBtn.hidden = true;
+        progressTitle.textContent = "The agent is working";
+        progressCaption.hidden = false;
+        OrbitProgress.start(progressBlock, "/agent-console/start", form, {
+          done: function (job) { setTimeout(function () { window.location.href = job.url; }, 600); },
+          failed: function (message) {
+            progressTitle.textContent = "The run stopped";
+            progressCaption.hidden = true;
+            OrbitProgress.fail(progressBlock, message);
+            retryBtn.hidden = false;
+          },
+        });
+      }
+      retryBtn.addEventListener("click", function () {
+        progressPanel.hidden = true;
+        showTab("automations");
+      });
+
+      updateCount();
+    })();
+  </script>
+{% endblock %}

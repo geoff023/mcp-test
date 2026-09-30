@@ -21,11 +21,12 @@ _ACTION_LABELS = {
     "approve": "Approved",
     "reject": "Sent back",
     "issue_token": "Issued a token",
+    "authorize": "Authorised the batch",
     "chat_turn": "Answered a question",
     "recover_stuck_run": "Manually recovered",
 }
 
-_SUCCESS_OUTCOMES = {"ok", "staged", "applied", "issued", "answered"}
+_SUCCESS_OUTCOMES = {"ok", "staged", "applied", "issued", "acknowledged", "answered"}
 _FAILURE_OUTCOMES = {"refused", "rejected", "failed"}
 
 
@@ -67,6 +68,9 @@ def friendly_detail(action: str, detail: str | None) -> str | None:
         return None
     if action in ("chat_turn", "start_run", "issue_token"):
         return None
+    if action == "authorize":
+        m = re.match(r"(\d+) change\(s\) authorised", detail)
+        return f"{m[1]} {'change' if m[1] == '1' else 'changes'} authorised" if m else None
     if action == "propose_estimate_change":
         m = re.match(r"(\S+) -> ([\d.]+) pts$", detail)
         return f"{m[1]} set to {m[2]} points" if m else None

@@ -1,10 +1,9 @@
 """Applies a run's staged changes to Jira.
 
-Shared by gateway/server.py's commit_changes tool (L4) and app/main.py's
-approve route (L3), so both write paths - the only two places in the
-system allowed to turn a staged change into a real Jira write - run
-exactly the same logic, guardrail check included, instead of two copies
-that could quietly drift apart.
+Shared by gateway/server.py's commit_changes tool (for anyone driving a run
+by hand) and app/main.py's approve route (every level's product-UI write,
+L2/L3/L4 alike), so every write path runs exactly the same logic, guardrail
+check included, instead of copies that could quietly drift apart.
 """
 
 from __future__ import annotations

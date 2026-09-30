@@ -47,43 +47,18 @@ def test_agent_console_defaults_scope_to_unestimated_with_no_query_string(client
     assert 'value="unestimated" checked' in resp.text
 
 
-def test_agent_console_defaults_level_to_l3_with_no_query_string(client):
+def test_agent_console_always_submits_at_l2(client):
+    """Super-Pilot's wizard no longer offers a level picker - see
+    app/levels.py's module docstring for the 3-mode redesign. Every run
+    it starts dispatches at L2, via a fixed hidden field."""
     test_client, _ = client
 
     resp = test_client.get("/agent-console")
 
-    assert 'value="L3" checked' in resp.text
-    assert 'value="L1" checked' not in resp.text
-
-
-def test_agent_console_prefills_level_from_the_query_string(client):
-    """POST /chat's redirect_to sends a human back here with ?level=L1
-    after sending a message - the wizard's own JS (not tested here, this
-    only checks the server-rendered state it reads) then reopens on the
-    embedded chat step using this."""
-    test_client, _ = client
-
-    resp = test_client.get("/agent-console?level=L1")
-
-    assert resp.status_code == 200
-    assert 'value="L1" checked' in resp.text
-
-
-def test_agent_console_get_embeds_the_chat_thread(client, conn):
-    """The console always loads the L1 chat history (see agent_console()'s
-    docstring), not only when level=L1, so switching to the embedded chat
-    step client-side never needs a second request."""
-    test_client, _ = client
-    conn.execute("INSERT INTO chat_sessions (id, created_at) VALUES ('s1', '2026-01-01T00:00:00+00:00')")
-    conn.execute(
-        "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES "
-        "('s1', 'user', 'which stories have no estimate?', '2026-01-01T00:00:01+00:00')"
-    )
-    conn.commit()
-
-    resp = test_client.get("/agent-console")
-
-    assert "which stories have no estimate?" in resp.text
+    assert 'name="level" value="L2"' in resp.text
+    assert 'name="level" value="L1"' not in resp.text
+    assert 'name="level" value="L3"' not in resp.text
+    assert 'name="level" value="L4"' not in resp.text
 
 
 def _insert_run(conn, run_id: str, status: str) -> None:
@@ -136,12 +111,12 @@ def test_agent_console_run_surfaces_orchestrator_failure_as_502(client, monkeypa
     assert "never called finish_run" in resp.text
 
 
-def test_agent_console_run_redirects_l1_back_to_the_chat_step_without_calling_the_orchestrator(client, monkeypatch):
+def test_agent_console_run_redirects_l1_to_chat_without_calling_the_orchestrator(client, monkeypatch):
     """L1 has no start_run tool - see TOOLS_BY_LEVEL in gateway/server.py -
     so this route must never hand it to run_reestimate_task at all, not
-    even to let it fail with a 502. The wizard's own JS shows the embedded
-    chat step instead of submitting when L1 is selected; this is the same
-    guard for anyone who posts here directly or has JS disabled."""
+    even to let it fail with a 502. The wizard itself no longer offers L1
+    (Co-Pilot lives entirely at /chat); this guards anyone who posts here
+    directly with level=L1, or has JS disabled and somehow still does."""
     test_client, _ = client
 
     async def unexpected_run_reestimate_task(*, level, target_jql, instructions):
@@ -156,7 +131,7 @@ def test_agent_console_run_redirects_l1_back_to_the_chat_step_without_calling_th
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/agent-console?level=L1"
+    assert resp.headers["location"] == "/chat"
 
 
 def test_agent_console_run_rejects_empty_specific_issues(client):

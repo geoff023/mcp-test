@@ -7,7 +7,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ page_title or "Orbit" }} - Orbit</title>
+  <title>{{ page_title or "CogniPM" }} - CogniPM</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,9 +17,9 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <a class="project" href="/dashboard" aria-label="Orbit, Jira project {{ sh.project_key }}">
+      <a class="project" href="/dashboard" aria-label="CogniPM, Jira project {{ sh.project_key }}">
         <span class="project-card">
-          <img class="project-logo" src="/static/orbit-wordmark.png" alt="Orbit" width="76" height="24">
+          <img class="project-logo" src="/static/cognipm-wordmark.png" alt="CogniPM" width="84" height="20">
           <span class="project-sub">Jira &middot; {{ sh.project_key or "not set" }}</span>
         </span>
       </a>
@@ -30,11 +30,14 @@
         </a>
 
         <span class="nav-label">AGENTS</span>
-        <a href="/agent-console" class="nav-item {{ 'active' if path == '/agent-console' }}">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 7v6M7 10h6"/></svg>New task
-        </a>
         <a href="/chat" class="nav-item {{ 'active' if path == '/chat' }}">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12v8H9l-3 2.5V13H4V5z"/></svg>Chat
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12v8H9l-3 2.5V13H4V5z"/></svg>Co-Pilot
+        </a>
+        <a href="/agent-console" class="nav-item {{ 'active' if path == '/agent-console' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 7v6M7 10h6"/></svg>Super-Pilot
+        </a>
+        <a href="/autopilot" class="nav-item {{ 'active' if path == '/autopilot' }}">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 3 4.5 12H9l-1 5L15.5 8H11z"/></svg>Auto-Pilot
         </a>
         <a href="/approvals" class="nav-item {{ 'active' if path == '/approvals' or path.startswith('/runs/') }}">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 13.5V9a4.5 4.5 0 0 1 9 0v4.5l1 1.5h-11zM8.5 16.5a1.5 1.5 0 0 0 3 0"/></svg>Approvals
@@ -77,7 +80,7 @@
         <div class="site-footer-inner">
           <span aria-hidden="true">⚠</span>
           <span>
-            Orbit is a research prototype. Agents can make mistakes — reasoning, proposed
+            CogniPM is a research prototype. Agents can make mistakes — reasoning, proposed
             values, and chat answers may be inaccurate, and nothing reaches Jira without a human
             step in between. Always verify before you approve, issue a token, or act on what it says.
           </span>

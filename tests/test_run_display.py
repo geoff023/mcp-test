@@ -61,3 +61,14 @@ def test_ago_reads_like_a_person_would_say_it():
     assert ago(at(timedelta(days=1)), now=now) == "1 day ago"
     assert ago(at(timedelta(days=4)), now=now) == "4 days ago"
     assert ago(None) == ""
+
+
+def test_mode_name_collapses_l2_and_l3_into_super_pilot_and_l4_into_auto_pilot():
+    from app.levels import mode_code, mode_name
+
+    assert mode_name("L1") == "Co-Pilot"
+    assert mode_name("L2") == "Super-Pilot"
+    assert mode_name("L3") == "Super-Pilot"
+    assert mode_name("L4") == "Auto-Pilot"
+    assert mode_code("L2") == mode_code("L3") == "M2"
+    assert mode_code("L4") == "M3"
